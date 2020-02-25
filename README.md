@@ -8,7 +8,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 ## Preparing R for the hard work
 You have to [install R](https://www.r-project.org/) and [R Studio Desktop](https://rstudio.com/products/rstudio/download/) on your laptop.
 
-If you already have those installed, perhaps you still want to update your R and R Studio to the latest available version.
+If you already have those installed, perhaps you still want to [update your R and R Studio](https://uvastatlab.github.io/phdplus/installR.html) to the latest available version.
 
 After the installation, open R studio, copy and paste the following code in the console, push enter:
 ```r
