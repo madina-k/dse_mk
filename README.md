@@ -29,13 +29,15 @@ pacman::p_load(req_packages, character.only = TRUE)
 # Check whether installation worked. See the output.
 loaded_packages <- pacman::p_loaded(req_packages, character.only = TRUE)
 if (loaded_packages %>% sum() == length(req_packages)) {
-  cat("Every package has been installed correctly\n")
+  cat("\n\n\n\nEvery package has been installed correctly\n")
 } else {
-  cat("There is an installation problem. The following packages have not installed properly:\n")
-  req_packages[loaded_packages == FALSE]
+  cat("\n\n\n\nThere is an installation problem. The following packages have not installed properly:\n")
+  not_loaded <- req_packages[loaded_packages == FALSE]
+  install.packages(not_loaded)
 }
 
 ```
+If the code returns that there was an installation problem. Try to run the code above again.
 
 ## Useful resources
 
