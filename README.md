@@ -42,11 +42,11 @@ If the code returns that there was an installation problem. Try to run the code 
 ## Useful resources
 
 
-Links to the theoretical material:
+Links for the theoretical material:
 * [An Introduction to Statistical Learning with Applications in R (ISLR)](http://faculty.marshall.usc.edu/gareth-james/ISL/ISLR%20Seventh%20Printing.pdf)
-* [High-dimensional methods and inference on structural and treatment effect](https://www.aeaweb.org/articles?id=10.1257/jep.28.2.29)
-* [Double/debiased machine learning for treatment and structural parameters](https://onlinelibrary.wiley.com/doi/full/10.1111/ectj.12097)
-* [Recursive partitioning for heterogeneous causal effects](https://www.pnas.org/content/113/27/7353.short)
+* [High-dimensional methods and inference on structural and treatment effect (Double Reg)](https://www.aeaweb.org/articles?id=10.1257/jep.28.2.29)
+* [Double/debiased machine learning for treatment and structural parameters (Double ML](https://onlinelibrary.wiley.com/doi/full/10.1111/ectj.12097)
+* [Recursive partitioning for heterogeneous causal effects (Causal Forest)](https://www.pnas.org/content/113/27/7353.short)
 
 Links for R material:
 * [R for Data Science](https://r4ds.had.co.nz/index.html)
@@ -63,5 +63,5 @@ Among them the most useful but not that well known are:
 - `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
 
 
-Links for Python examples:
+Links for Python code:
 * [ISLR-python](https://github.com/JWarmenhoven/ISLR-python)
