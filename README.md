@@ -39,15 +39,6 @@ if (loaded_packages %>% sum() == length(req_packages)) {
 
 ## Useful resources
 
-The list of [keyboard shortcuts for RStudio](https://support.rstudio.com/hc/en-us/articles/200711853-Keyboard-Shortcuts)
-
-Among them the most useful but not that well known are:
-
-- `cmd+shift+m` (or `ctrl+shift+m` for Windows) to type the pipe operator `%>%`.
-- `alt+up` or `alt+down` to move a line up or down.
-- `ctrl+alt+down` for multiline selection.
-- `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
-
 
 Links to the theoretical material:
 * [An Introduction to Statistical Learning with Applications in R (ISLR)](http://faculty.marshall.usc.edu/gareth-james/ISL/ISLR%20Seventh%20Printing.pdf)
@@ -59,6 +50,16 @@ Links for R material:
 * [R for Data Science](https://r4ds.had.co.nz/index.html)
 * [Cookbook R](http://www.cookbook-r.com/)
 * Visualization with [ggplot2](https://ggplot2.tidyverse.org/)
+
+The list of [keyboard shortcuts for RStudio](https://support.rstudio.com/hc/en-us/articles/200711853-Keyboard-Shortcuts)
+
+Among them the most useful but not that well known are:
+
+- `cmd+shift+m` (or `ctrl+shift+m` for Windows) to type the pipe operator `%>%`.
+- `alt+up` or `alt+down` to move a line up or down.
+- `ctrl+alt+down` for multiline selection.
+- `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
+
 
 Links for Python examples:
 * [ISLR-python](https://github.com/JWarmenhoven/ISLR-python)
