@@ -49,8 +49,8 @@ Among them the most useful but not that well known are:
 - `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
 
 
-Links to the book and articles:
-* [An Introduction to Statistical Learning with Applications in R](http://faculty.marshall.usc.edu/gareth-james/ISL/ISLR%20Seventh%20Printing.pdf)
+Links to the theoretical material:
+* [An Introduction to Statistical Learning with Applications in R (ISLR)](http://faculty.marshall.usc.edu/gareth-james/ISL/ISLR%20Seventh%20Printing.pdf)
 * [High-dimensional methods and inference on structural and treatment effect](https://www.aeaweb.org/articles?id=10.1257/jep.28.2.29)
 * [Double/debiased machine learning for treatment and structural parameters](https://onlinelibrary.wiley.com/doi/full/10.1111/ectj.12097)
 * [Recursive partitioning for heterogeneous causal effects](https://www.pnas.org/content/113/27/7353.short)
