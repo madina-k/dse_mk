@@ -1,6 +1,8 @@
 # dse_mk
 This is the github repository for the second part of the Seminar Data Science for Economics. It contains folders with lecture slides and the codes for tutorials.
 
+Copy this repository to your laptop and pull from the master branch before each class to get the most recent version of lecture slides and new tutorials. 
+
 The tutorials are based on R. If you like, you still can use Python (or any other programming language), but then you will have to rely on self-exploration.
 
 ## Preparing R for the hard work
@@ -47,6 +49,11 @@ Among them the most useful but not that well known are:
 - `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
 
 
+Links to the book and articles:
+* [An Introduction to Statistical Learning with Applications in R](http://faculty.marshall.usc.edu/gareth-james/ISL/ISLR%20Seventh%20Printing.pdf)
+* [High-dimensional methods and inference on structural and treatment effect](https://www.aeaweb.org/articles?id=10.1257/jep.28.2.29)
+* [Double/debiased machine learning for treatment and structural parameters](https://onlinelibrary.wiley.com/doi/full/10.1111/ectj.12097)
+* [Recursive partitioning for heterogeneous causal effects](https://www.pnas.org/content/113/27/7353.short)
 
 Links for R material:
 * [R for Data Science](https://r4ds.had.co.nz/index.html)
