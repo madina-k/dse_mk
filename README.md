@@ -31,13 +31,13 @@ loaded_packages <- pacman::p_loaded(req_packages, character.only = TRUE)
 if (loaded_packages %>% sum() == length(req_packages)) {
   cat("\n\n\n\nEvery package has been installed correctly\n")
 } else {
-  cat("\n\n\n\nThere is an installation problem. The following packages have not installed properly:\n")
+  cat("\n\n\n\nThere is an installation problem. Trying to install the failed packages again:\n")
   not_loaded <- req_packages[loaded_packages == FALSE]
   install.packages(not_loaded)
 }
 
 ```
-If the code returns that there was an installation problem. Try to run the code above again.
+If the code returns that there was an installation problem, try to run the code above again.
 
 ## Useful resources
 
