@@ -1,9 +1,9 @@
-# dse_mk
+# Data Science for Economics
 This is the github repository for the second part of the Seminar Data Science for Economics. It contains folders with lecture slides and the codes for tutorials.
 
 Copy this repository to your laptop and pull from the master branch before each class to get the most recent version of lecture slides and new tutorials. 
 
-The tutorials are based on R. If you like, you still can use Python (or any other programming language), but then you will have to rely on self-exploration.
+The tutorials are based on R. If you like, you still can use Python (or any other programming language), but then you will have to rely on self-study.
 
 ## Preparing R for the hard work
 You have to [install R](https://www.r-project.org/) and [R Studio Desktop](https://rstudio.com/products/rstudio/download/) on your laptop.
