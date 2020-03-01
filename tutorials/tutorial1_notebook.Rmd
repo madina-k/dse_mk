@@ -1,0 +1,559 @@
+---
+title: 'Tutorial 1: regularization (DSE 2020)'
+output:
+  # revealjs::revealjs_presentation:
+  #   transition: fade
+  #   center: TRUE
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+author: Madina Kurmangaliyeva
+---
+
+This tutorial is loosely based on R lab codes for Chapter 6 in [An Introduction to Statistical Learning by James, Witten, Hastie, and Tibshirani](http://faculty.marshall.usc.edu/gareth-james/ISL/Chapter%206%20Labs.txt) 
+
+
+# Before we start
+
+***
+
+The list of [keyboard shortcuts for RStudio](https://support.rstudio.com/hc/en-us/articles/200711853-Keyboard-Shortcuts)
+
+Among them the most useful but not that well known are:
+
+- `cmd+shift+m` (or `ctrl+shift+m` for Windows) to type the pipe operator `%>%`.
+- `alt+up` or `alt+down` to move a line up or down.
+- `ctrl+alt+down` for multiline selection.
+- `cmd+shift+d` (or `ctrl+shift+d`) duplicates the line or selection
+
+```{r knitr_options, include=FALSE}
+# This is knitr settings for figures size
+knitr::opts_chunk$set(fig.width=6, fig.height=4) 
+```
+
+
+# Preliminaries, loading data
+
+***
+
+First, you pull the folder with tutorials from the git repository [git.io/dse_mk](https://git.io/dse_mk), it contains the  `tutorials.Rproj`. Open it, it will automatically set the current folder `tutorials` as your working directory. You can check now yourself by running the following code:
+
+```{r check_directory}
+getwd()
+```
+
+***
+
+Specify the list of R packages needed for this tutorial:
+
+- `tidyverse` is an important meta-package that collects many useful packages for data science (most of them developed by Hadley Wickham). Learn more at https://www.tidyverse.org/
+- `glmnet` collects functions to run linear regularization in R, developed among others by Hastie and Tibshirani, the authors of the ISLR textbook
+```{r packages}
+req_packages <- c(
+  "tidyverse",
+  "glmnet"
+)
+```
+
+***
+
+Install `pacman` to easily load the required packages with function `p_load()`. If the package is not instaled, `p_load` will automatically call to install it on your R Studio and then load it.
+```{r load_packages}
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+```
+
+## Compas data
+
+We will be working with COMPAS data, about which we talked about in the Governance of Innovation class. 
+
+Do not worry about fairness issues at this stage, also we will be predicting number of priors, rather than recidivism. 
+
+We are using the data only for illustration purposes on how different prediction methods work.
+
+***
+
+The dataset we are loading does not represent all the variables used by the original COMPAS software, but rather a stylized and cleaned version of it to learn in class. The dataset comes from package _fairness_. See the [documentation.](https://www.rdocumentation.org/packages/fairness/versions/1.0.1/topics/compas)
+
+```{r read_data}
+dataset <- read_rds("./datasets/compas_2000.rds") 
+```
+
+For the differences between .rds and .Rdata, see [this StackOverflow post.](https://stackoverflow.com/questions/21370132/r-data-formats-rdata-rda-rds-etc)
+
+***
+
+You can inspect the dataset with any of the following commands:
+```{r inspect}
+# dataset %>% names()
+# dataset %>% head()
+# dataset %>% glimpse()
+dataset %>% str()
+```
+
+
+***
+
+COMPAS variables:
+
+- **Two_yr_Recidivism:** factor, yes/no for recidivism or no recidivism. This is the outcome or target in this dataset
+- **Number_of_Priors:** numeric, number of priors, normalized to mean = 0 and standard deviation = 1
+- **Age_Above_FourtyFive:** factor, yes/no for age above 45 years or not
+- **Age_Below_TwentyFive:** factor, yes/no for age below 25 years or not
+- **Female:** factor, female/male for gender
+- **Misdemeanor:** factor, yes/no for having recorded misdemeanor(s) or not
+- **ethnicity:** factor, Caucasian, African American, Asian, Hispanic, Native American or Other
+
+# Making descriptive tables
+
+***
+
+* We use `summarise_all` to compute a summary statistic for each variable in the dataset. 
+* To each variable, we apply the (nested) function `~sum(is.na(.))` to sum the total number of missing observations.
+* We transpose the resulting table with `t()` for convinience.
+
+```{r summarise}
+dataset %>% summarise_all(~sum(is.na(.))) %>% t()
+```
+
+
+***
+
+None of the variables has any missing values, because the data has been cleaned for us before. 
+
+But it is a **necessary step** of ANY data exploration.
+
+***
+
+How does number of priors vary by ethnicity? How many obs are there per ethnicity?
+
+(Note how we use the pipe operator `%>%`)
+
+```{r group_ethnicity}
+dataset %>% group_by(ethnicity) %>% 
+  summarise(mean_priors = mean(Number_of_Priors),
+            n = n())
+```
+
+*** 
+
+*Exercise 1* - Edit the code above in the box below:
+
+1) How does average number of priors vary by *gender*? 
+2) How does average number of priors vary by *ethnicity* AND *gender*?
+
+```{r question_gender}
+# Write your answer here
+
+```
+
+
+```{r question_gender_ethnicity}
+# Write your answer here
+
+```
+
+# Data visualization
+
+***
+
+You can also visualize some variables using the following code
+
+```{r histogram}
+dataset %>% ggplot(aes(x = Number_of_Priors)) + geom_histogram()
+```
+
+***
+
+* We used ggplot package 
+* In the aesthetics function `aes(x = ?, y = ?)` you specify which variables of the data to plot. 
+* To vary the color depending on another variable `z`, add `aes(x, y, color = z)`. 
+* To vary the shape of the point depending on another variable `z`, add `aes(x, y, shape = z)`. 
+* Histograms do not require `y`, since `y` is the count automatically generated by ggplot.
+
+
+
+***
+
+Instead of a histogram, you can make a density plot with `geom_density()`
+
+```{r density_plot}
+dataset %>% ggplot(aes(x = Number_of_Priors)) + geom_density()
+```
+
+
+***
+
+You can also ask to break down the histogram for men and women separately.
+
+```{r plot_bygender}
+dataset %>% 
+  ggplot(aes(x = Number_of_Priors, color = Female)) + geom_density()
+```
+
+***
+
+Compare this graph to the previous graph. What is different?
+
+```{r plot_by_gender2}
+dataset %>% 
+  ggplot(aes(x = Number_of_Priors)) + geom_density(color = "red") + 
+  facet_grid(~Female)
+```
+
+***
+
+*Exercise 2:*
+
+Keep only Caucasians and African Americans. Then, make a histogram of the number of priors colored by `ethnicity` and faceted by `Age_Below_TwentyFive`.
+
+
+```{r plot_by_age25_ethn}
+# Put your answer here:
+
+## Hint (the start):
+# dataset %>%
+#   filter(ethnicity %in% c("Caucasian", "African_American")) %>% ...
+
+```
+
+
+# Preparing data for regressions
+
+***
+
+* Let's convert the factor variables into 1/0 dummy variables using the `model.matrix` function that converts a dataframe into matrix ready for regression. 
+
+* Note that we used `.` to ask to use all the variables. 
+
+* Then, we convert the matrix back to a dataframe format, drop the intercept variable, and overwrite _dataset_ with the resulting output. 
+
+```{r convertX}
+model.matrix(~ ., data = dataset) %>% 
+  as.data.frame() %>% 
+  select(-`(Intercept)`) -> dataset
+```
+
+
+***
+
+Check: The resulting database should have 2,000 observations and 11 variables. Notice how the names of variables changed after we converted factor variables into numeric.
+
+```{r check_structure}
+str(dataset)
+```
+
+
+
+## Summary statistics
+
+```{r summary_stats}
+dataset %>% 
+  select(-Number_of_Priors) %>%  
+  gather() %>% 
+  group_by(key) %>%
+  summarise(share = mean(value)) 
+```
+
+
+***
+
+An alternative way to get the same result:
+
+```{r summary_stats_alternative}
+# # Alternative code
+dataset %>%
+  select(-Number_of_Priors) %>%
+  summarise_all(~mean(.)) %>% t()
+
+```
+
+
+# Ridge regression
+
+***
+
+The task is to predict the number of priors based on other variables
+
+First, we will apply ridge regression.
+
+## Step 1 -- The grid
+
+let's create a grid with penalty parameters, ranging from as high as 10^10 to as small as 0.01.
+
+```{r grid}
+grid <- 10^seq(10, -2, length = 100)
+```
+
+*** 
+
+You can quickly visualize penalties by using the basic `plot()` function
+
+```{r penalty_plot}
+plot(x = c(1:100), y = grid)
+```
+
+*** 
+
+You can always to check the help files for the function:
+
+```{r help_function}
+help(glmnet)
+```
+
+***
+
+* Unfortunately, according to documentation, the function glmnet does not accept dataframes. 
+* It requires `x` to be a matrix, and `y` to be a vector.
+* Also, we want to create interaction terms, otherwise, it is too simplistic.
+
+***
+
+## Step 2 -- Create matrix X and vector y
+
+Let's create matrix `X` and vector `y`
+
+```{r create_Xy}
+X <- dataset %>% select(-Number_of_Priors) 
+X <- model.matrix(~ .^3 - 1, X ) 
+y <- dataset$Number_of_Priors
+```
+
+The formula `~ .^3 - 1` means:
+
+* Take every predictor and create interaction terms, i.e., $(X_1 + \ldots + X_p)^3$
+* Do not create the variable for intercept, i.e., a vector of ones
+
+***
+
+`glmnet` runs ridge regression, if we set  `alpha = 0`. What does `standardize = TRUE` do?
+
+```{r ridge}
+set.seed(9830)
+ridge_reg <- glmnet(x = X, y = y, alpha = 0, lambda = grid, 
+                    standardize = TRUE)
+```
+
+***
+
+There are 176 variables (including interaction terms)  and 100 different regressions, one per each value of lambda (the penalty) in our grid vector.
+
+```{r check_dimensions}
+dim(coef(ridge_reg))
+```
+
+***
+
+Print the first twenty coefficients of ridge regression for the 50th lambda and calculate the l2 norm.
+
+```{r lambda50}
+cat("for lambda = ", ridge_reg$lambda[50], 
+    " the ridge regression coefficients are: \n")
+coef(ridge_reg)[1:20 , 50]
+cat("\n\nand the l2 norm is ", 
+    sqrt(sum(coef(ridge_reg)[-1,50]^2)), "\n")
+```
+
+***
+
+Get l2 norm for all lambdas: $\sqrt{\sum_j \beta^2_j}$
+
+* What do you observe? Why? 
+* (Note: `map()` function comes from [purrr](https://purrr.tidyverse.org/) package)
+
+```{r l2norm}
+l2 <- map_dbl(c(1:100), ~sqrt(sum(coef(ridge_reg)[-1,.]^2)))
+plot(x = log(grid), y = l2)
+```
+
+## Step 3 -- Create train and test (hold-out) samples
+
+Assign half the sample into training set, by creating a vector from 1 to the number of observations and randomly assigning half the vector to train
+```{r split_sample}
+train <- sample(1:nrow(X), nrow(X)/2)
+y_test <- y[-train]
+test <- (-train)
+```
+
+***
+
+## Step 4 -- Run Ridge reg on the whole training set
+
+Run ridge regression on the training set
+```{r ridge_trainsample}
+ridge_reg <- glmnet(X[train,], y[train], alpha = 0, 
+                    lambda = grid, thresh = 1e-12)
+```
+
+
+
+***
+
+### Example 1: $\lambda$ = 4
+
+Now, you can explore for example, what would be  the test error if we choose $\lambda = 4$:
+```{r testMSE_ridge}
+ridge_pred <- predict(ridge_reg, s = 4, newx = X[test, ])
+cat("For lambda = 4, the test MSE equals to ", mean((ridge_pred - y_test)^2))
+```
+
+***
+
+### Example 2: Test MSE if using  only intercept
+
+**Exercise:**  Write your code to check what would be the test MSE if we use only intercept to predict
+
+```{r testMSE_intercept}
+# Write your answer here
+```
+
+***
+
+### Example 3: OLS
+
+**Exercise:**  Write your code to check what would be the test MSE if we used OLS to predict
+```{r testMSE_ols}
+# Write your answer here
+```
+
+***
+
+## Step 5 -- Cross validation to choose the best lambda
+
+```{r xval_ridge}
+cv_out <- cv.glmnet(X[train, ], y[train], alpha = 0)
+```
+
+***
+
+Let's plot the cros-validation MSE as function of different lambda.The results support using only a small penalty on the regression coefficients. 
+```{r plot_xval_ridge}
+plot(cv_out)
+```
+
+
+
+***
+
+Let's ask to return the best lambda
+```{r best_ridge}
+bestlam <- cv_out$lambda.min
+bestlam
+```
+
+***
+
+## Step 6 -- Test MSE at best lambda
+
+Compute MSE:
+```{r bestmse_ridge}
+ridge_pred <- predict(ridge_reg, s = bestlam, newx = X[test, ])
+mean((ridge_pred - y_test)^2)
+```
+
+***
+## Step 7 -- Get Ridge coefficients at best lambda
+
+Now use the best lambda for the whole sample. Show the first twenty coefficients
+```{r bestcoef_ridge}
+out <- glmnet(X, y, alpha = 0)
+predict(out, type = "coefficients", s = bestlam)[1:20,]
+```
+
+
+# Lasso regression
+
+***
+
+## Step 4 for Lasso
+
+
+```{r lasso}
+lasso_reg <- glmnet(X[train, ], y[train], alpha = 1,lambda = grid)
+```
+
+***
+
+## Step 5 for Lasso
+
+```{r xval_lasso}
+cv_out <- cv.glmnet(X[train,], y[train], alpha = 1)
+plot(cv_out)
+```
+
+Lasso has selected just some  predictors, not every
+
+***
+
+## Exercise: Step 6 for Lasso
+
+* Find best lambda.
+* Then get the predictions of Lasso for the test set
+* Calculate the test MSE
+* Compare the test MSE of Lasso to Ridge
+
+***
+
+```{r best_lasso}
+bestlam <- cv_out$lambda.min
+lasso_pred <- predict(lasso_reg, s = bestlam, newx = X[test, ])
+cat("Best lambda is ", bestlam, "\n")
+cat("test MSE for lasso regression is ", mean((lasso_pred - y_test)^2), "\n\n\n")
+cat("Compare to the test MSE of Ridge ", mean((ridge_pred - y_test)^2))
+```
+
+Lasso performance in this case is relatively the same as ridge.
+
+***
+
+## Exercise: Step 7 for Lasso
+
+* Estimate Lasso using the full sample
+* Save Lasso coefficients using the best lambda
+
+***
+
+```{r bestcoef_lasso}
+out <- glmnet(X, y, alpha = 1, lambda = grid)
+lasso_coef <- predict(out, type = "coefficients", s = bestlam)
+```
+
+
+
+# HOMEWORK: write a function that automates the code for Lasso and Ridge
+
+***
+
+Let's write a function that would wrap our operations (steps 4 to 7) and return the values we want:
+
+* inputs: `grid`, `alpha`, `X_train`, `y_train`, `X_test`, `y_test`
+* output is a list consisting of three objects: `bestlam`, `test_mse`, `coef`
+
+Save the function in a separate file in the folder functions under the name `xval_glmnet_wrapper.R`.
+
+***
+
+Then load the created function:
+```{r loadfunction}
+source("functions/xval_glmnet_wrapper.R")
+```
+
+***
+
+Repeat the analysis for ridge and save the results  to `r1_ridge`:
+
+```{r ridge_automated, include=FALSE}
+r1_ridge <- xval_glmnet_wrapper(X_train = X[train, ], y_train = y[train],
+                                X_test = X[test, ], y_test = y[test], 
+                                alpha = 0)
+```
+
+***
+
+```{r ridge_automated_explore}
+r1_ridge %>%  str()
+r1_ridge$bestlam
+r1_ridge$test_mse
+```
+
