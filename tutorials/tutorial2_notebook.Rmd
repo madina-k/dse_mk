@@ -1,0 +1,404 @@
+---
+title: "Tutorial 2: Lasso for causal inference"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+author: Madina Kurmangaliyeva
+---
+# Preliminaries
+
+```{r packages}
+req_packages <- c(
+  "glmnet",
+  "hdm",
+  "tidyverse",
+  "broom"
+)
+
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+
+```
+
+
+# Post-regularization inference: the wrong way
+
+Let's create a matrix populated by random standard normal observations ~N(0,1). The variables we created are named from `V1` to `V100`.
+```{r simulate_many_controls}
+set.seed(9204825)
+P <- 100
+N <- 100
+simulated <- matrix(
+  rnorm(n = N*P), 
+  nrow = N, 
+  ncol = P) %>% 
+  as.data.frame()
+simulated %>% head()
+```
+
+Now, we will simulate a target variable `y` which depends on the first nine variables `V1` to `V9`, and also it depends on the treatment variable `d`. The treatment effect is 1. At the same time, treatment  depends on the first three variables `V1` to `V3`. 
+
+```{r simulate_y_and_x}
+set.seed(25)
+
+simulated <- simulated %>% 
+  mutate(
+    d = V1 + V2 + V3 + 0.2*rnorm(N),
+    y = 1*d + 10*V1 + 10*V2 + 10*V3 + 
+      10*V4 + 10*V5 + 10*V6 + 
+      10*V7 + 10*V8 + 10*V9 + rnorm(N)
+    ) %>% 
+  select(y, d, everything())
+
+simulated %>%  head()
+```
+
+You ex-ante do not know which variables are important for `d` or `y`, but you are interested in the impact of `d` on `y`.  
+
+**Exercise:** Let's try to run a regression with all the controls:
+
+```{r kitchen_sink_regression}
+# Put your code here
+```
+
+Question: What is hapenning with the estimates for standard errors? What is tge estimate of the treatment effect?
+
+
+
+
+## Naive Lasso
+Now let's try to use Lasso and cross-validation to select variables that explain y.
+
+```{r naive_Lasso}
+set.seed(2385)
+X <- simulated %>%  select(-y)  %>%  as.matrix()
+cv_Lasso <- cv.glmnet(X, simulated$y, alpha = 1)
+plot(cv_Lasso)
+```
+
+Lasso chose more than 25 predictors. It is more than ten variables in the true model, but it is still less than  101 variables we started with.
+
+Now using the knowledge from the previous tutorial:
+1) We extract the best lambda from `cv_Lasso`
+2) Run Lasso regression on `simulated` 
+3) Get the coefficients at the best lambda and filter only those coefficients that have non-zero values.
+
+
+```{r naive_Lasso_bestlambda}
+bestlam <- cv_Lasso$lambda.min
+Lasso_reg <- glmnet(X, simulated$y, alpha = 1)
+Lasso_coefficients <- predict(Lasso_reg,  type = "coefficients", s = bestlam) %>% 
+  as.matrix() %>% 
+  as.data.frame() %>% 
+  mutate(coef_names = row.names(.)) %>% 
+  rename(coef = `1`) %>% filter(coef != 0)
+```
+
+Now let's see whether `d` is among the chosen variables and if so, what its coefficient is.
+
+```{r get_Lasso_coefficients}
+Lasso_coefficients
+```
+
+As you can see the coefficient in front of `d` is wrong.  Why? Would running an OLS using the variables selected by Lasso + `d` help?
+
+
+
+**Exercise:** Run an OLS with `y` as dependent variable, and `d` + all other  variables that have been selected by Lasso (i.e., Lasso_coefficients):
+
+```{r OLS_WRONGpostselection}
+# Put your code here
+
+```
+
+
+
+
+Even if we run a post-Lasso OLS regression, using only the variables chosen by Lasso, the coefficient in front of `d` (10.359) is still very different from the true treatment effect (1.000):
+
+Questions: 
+1) Note, which important variable is missing? 
+2) Why is it missing?
+3) What is wrong with Lasso?
+
+
+
+## Create 100 simulated datasets
+
+In order to study the property of the estimator in different random samples, let's create a bigger simulation: one hundred datasets randomly generated from the same data-generating process
+
+```{r 100_simulations}
+set.seed(123)
+nSim <- 100
+simulated100 <-  matrix(
+  rnorm(n = N*P*nSim), 
+  nrow = N*nSim, 
+  ncol = P) %>% 
+  as.data.frame() %>% 
+  mutate(
+    d = V1 + V2 + V3 + 0.2*rnorm(N*nSim),
+    y = 1*d + 10*V1 + 10*V2 + 10*V3 + 
+      10*V4 + 10*V5 + 10*V6 + 
+      10*V7 + 10*V8 + 10*V9 + rnorm(N*nSim),
+    SimNumber = rep(c(1:nSim), each = N)
+    ) %>% 
+  select(y, d, everything()) 
+
+# Nest simulated datasets 
+simulated100 <- simulated100 %>% 
+  group_by(SimNumber) %>% 
+  nest()
+
+simulated100 %>% head()
+simulated100$data[[1]] %>%  head()
+simulated100$data[[1]] %>%  names()
+
+```
+
+
+
+### What if we knew the true functional form and run OLS?
+
+If we knew the true functional form, we could estimate the treatment effect using OLS. We would make sure to include control variables from V1 to V9 in our regression.
+
+Let's run such an OLS with the true functional form on each simulated dataset: 
+
+1) Note that we first need to create a function, which we name `simulate_correctols()`, save it in the `functions` subfolder of the tutorials as `simulate_correctols.R`. We call the function with `source()`. `simulate_correctols()` takes only one argument as input -- the dataframe -- and returns back a row with the OLS  estimates of the treatment effect. (See the code in `simulate_correctols.R`)
+
+2) Finally, we apply that function on each random sample of the simulated data. We achieve it using `map_dfr()` function, instead of using a `for` loop. 
+
+a) The first argument in `map_dfr()` gives you the counter `.x` from `1` to the total number of simulations `nSim`. Remember that we can access any of the one hundred different simulations of a dataset, by subsetting it in this manner: `simulated100$data[[simulation_number]]`. 
+
+b) The last argument is the function that we want to run. In our case, it is `simulate_correctols()`, which we apply on the simulated data. Note, that the counter `.x` helps us access the corresponding simulation:  `simulated100$data[[.x]]`
+
+
+```{r simulate_trueols}
+set.seed(83)
+source("./functions/simulate_correctols.R")
+results_true <- map_dfr(.x = c(1:nSim), ~simulate_correctols(simulated100$data[[.x]]))
+```
+
+
+Let's plot the results. I created a special function `plot_estimates_tut2()` for plotting the estimation results in this tutorial.
+
+```{r plot_trueols}
+# Plot the results 
+source("./functions/plot_estimates_tut2.R")
+plot_estimates_tut2(results_true)
+```
+
+The dashed red line points to the true treatment effect. 
+
+
+```{r true_ols_mean}
+# Mean of the distribution
+results_true %>% summarise(mean(estimate), sd(estimate))
+```
+
+## Distribution of the naive Lasso estimator
+
+But, let's see the distribution of coefficients in front of `d` using naive lasso on those 100 different samples of data by applying the naive lasso for each sample. 
+
+```{r simulate_naiveLasso_many_times}
+source("./functions/simulate_naiveLasso.R")
+set.seed(456)
+results_naive <- map_dfr(.x = c(1:nSim), ~simulate_naiveLasso(data = simulated100$data[[.x]]))
+
+# Plot the results 
+source("./functions/plot_estimates_tut2.R")
+plot_estimates_tut2(results_naive)
+```
+
+
+As you can see, the distribution of estimates is centered around two numbers: it has a weird bump on the right tail (by now you should know why).
+
+```{r naiveLasso_mean}
+# Mean of the distribution
+results_naive %>% summarise(mean(estimate), sd(estimate))
+
+```
+
+## Why does naive Lasso fail to estimate the treatment effect?
+
+1) The objective of Lasso is prediction not estimation
+2) We selected the controls that best predict `y`, but we forgot about `d` and omitted-variables bias problem. 
+
+In the chunk code `get_Lasso_coefficients`, we see that `V3` was missing because `d` and `V3` were correlated and Lasso dropped `V3`. Its goal was prediction: `d` and `V3` were predicting `y` equivalently well, no need to keep both. While we wanted to keep `V3` because dropping would generate bias in estimating the treatment effect.
+
+
+What can we do? Double Selection!
+
+# Double selection (DS)
+
+
+## Partialling out estimator
+
+In order to understand DS approach for causal inference, we first need to take another look at the OLS.
+
+Let us simulate simple data, where `d` is the variable of interest, `z` is an endogenous variable, and `y` is outcome, generated according the following data-generating process:
+
+```{r simple_ols}
+set.seed(42)
+partout_sim <- tibble(
+  z = runif(n = 1000, min = 0, max = 5), 
+  d = 5*z + 2*rnorm(n = 1000) + rnorm(n = 1000),
+  y = 10 + 2*d + 7*z + rnorm(n = 1000)
+)
+
+lm(y ~ d, data = partout_sim) %>% 
+  tidy() 
+
+```
+
+Omitting `z` generates an omitted variable bias. The estimate of a coefficient corresponding to `d` is 3.3, while we know the true coefficient is 2.
+
+```{r ols}
+lm(y ~ d + z, data = partout_sim) %>% 
+  tidy()
+  
+```
+
+When we include `z` as a control, the bias disappears.
+
+**Exercise** Now, let's partial out `z` from `d` and `y`. In other words, regress `d` on `z` to obtain residuals. Then, regress `y` on `z`. And then run the residuals of `y` on the residuals of `d`.
+
+```{r partial_out}
+# Put your answer here. 
+
+d_no_z <- lm(d ~ z, data = partout_sim) %>% resid()
+# 2) y_no_z <- ...
+# 3) regress y_no_z on d_no_z
+```
+
+What is the coefficient in from of `d_no_z`? Is it equivalent to the coefficient in front of `d` in the previous regression `lm(y ~ d + z)`? 
+
+The coefficient in front of `d` in the regression `lm(y ~ d + z)` captures any residual co-movement between `y` and `d` that cannot be explained by the co-movement of `y` with `z` and `d` with `z`.
+
+
+## Transforming the inference problem into prediction problems
+See the slides.
+
+
+## Double Selection Step-by-Step
+### Step 1. Selecting variables for `y`
+Let's return back to our simulated dataset `simulated`. To use selection methods properly, we need to run TWO selection regressions: one for `y` and another for `d`. 
+
+
+```{r double_Lasso_select_y}
+set.seed(30)
+# Create the matrix of predictors
+X <- simulated %>%  
+  select(-y, -d)  %>%  
+  as.matrix()
+
+source("./functions/get_cvLassoCoefs.R")
+# Run Lasso for y on X and get coefficients
+lasso_coefficients_y <- get_cvLassoCoefs(X, simulated$y)
+lasso_selection_y <- lasso_coefficients_y$coef_names[-1]
+lasso_selection_y
+```
+
+### Step 2. Selecting variables for `d`
+Now, we do the same but  for the treatment variable
+```{r double_Lasso_select_d}
+lasso_coefficients_d <- get_cvLassoCoefs(X, simulated$d)
+lasso_selection_d <- lasso_coefficients_d$coef_names[-1]
+lasso_selection_d
+```
+
+### Step 3. Final OLS
+
+Finally, let's see the OLS regression of `y` on `d` AND the union of selected variables:
+
+```{r ols_with_jointselection}
+lasso_selection_joint <- c("y", "d", lasso_selection_y, lasso_selection_d)
+simulated %>% 
+  select(all_of(lasso_selection_joint)) %>%  
+  lm(y ~ ., data = .) %>%  
+  tidy()
+```
+
+### The distribution of our cross-validated DS-estimator
+
+**Exercise:** Finish coding
+
+1) Get the distribution of the cross-validated DS-estimator using 100 samples stored in `simulated100`
+2) Plot the estimates
+3) Get the mean and sd of the distribution 
+
+```{r simulate_doubleselection}
+set.seed(81)
+source("./functions/simulate_cvDS.R")
+# Put your code here
+
+```
+
+
+The results are better, but somewhat downward biased with higher standard errors
+
+
+## Double Selection using Rigorous Lasso: `rlassoEffect()`
+
+However, we actually should be using `rlassoEffect()` function from the [`hdm` package](https://github.com/cran/hdm/blob/master/DESCRIPTION).
+
+`rlassoEffect` allows you to use double selection procedure using Rigorous Lasso, which uses theory- and data-driven search for lambda, instead of cross-validation. As it appears, when the end goal is inference, rigorous Lasso is simply better. [see lecture slides] 
+
+```{r hdm_doubleselection}
+results_DShdm <- rlassoEffect(
+  x = simulated %>%  select(-y, -d) %>%  as.matrix(),
+  y = simulated$y,
+  d = simulated$d,
+  method = "double selection")
+summary(results_DShdm)$coefficients
+```
+
+### The distribution of the DS estimator based on rigorous Lasso
+
+**Exercise:** Do the same exercise now for rlassoEffect function 
+
+```{r simulate_rlassoDS}
+set.seed(83)
+source("./functions/simulate_rlassoDS.R")
+# Put your answer here
+
+```
+
+
+It looks pretty good.
+
+Notice, that the double selection using `rlassoEffect()` does its work pretty well. Compare the standard deviation of the estimate: 0.587 vs the true 0.576.
+
+
+# Final comparison: Naive Lasso vs cross-validated DS vs rigorous DS vs the true distribution
+
+Let's combine all of the results for different estimators together:
+```{r comparing_estimators}
+results_all <- bind_rows(
+  results_naive     %>%  select(estimate) %>% mutate(estimator = "naive Lasso"),
+  results_cvDS      %>%  select(estimate) %>% mutate(estimator = "cv DS"),
+  results_rlassoDS  %>%  select(estimate) %>% mutate(estimator = "rlasso DS"),
+  results_true      %>%  select(estimate) %>% mutate(estimator = "true OLS"),
+) %>% 
+  mutate(estimator = factor(estimator, levels = c("true OLS", "naive Lasso", "cv DS", "rlasso DS")))
+
+results_all %>% 
+  ggplot(aes(x = estimate, fill = estimator, color = estimator)) +
+    geom_density(alpha = 0.2) +
+    geom_vline(xintercept = 1, linetype = "dashed", color = "red") +
+  theme_bw()
+  
+```
+
+Bottomline: rlasso DS > cv DS. And never use single Lasso for inference
+
+# HOMEWORK: Use simulations to study the behavior of rlassoDS vs cvDS vs trueOLS estimators 
+
+Check whether the answers might change as:
+
+1) number of predictors increase (make a grid of different values of `P`)
+2) number of variables important for the assignment of treatment decreases/increases (i.e., in our example `d` depended only on `V1`, `V2`, and `V3`). See whether removing/adding more variables to the data-generating process for `d` will change the distributions the estimators. How can we link this to sparsity assumption?
+3) the size of the treatment effect lowers or increases (in our example it was 1, does anything change if it drops to 0.1, or increases to 10?).
+
+
