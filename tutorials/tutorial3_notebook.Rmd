@@ -1,0 +1,214 @@
+---
+title: "Tutorial 3: Naive and Cross-fitted DML"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: 3
+author: Madina Kurmangaliyeva
+---
+THIS TUTORIAL IS BASED ON THE FOLLOWING [BLOG POST](https://www.r-bloggers.com/cross-fitting-double-machine-learning-estimator/)
+
+```{r load_packages}
+packages <- c(
+  "randomForest",
+  "hdm",
+  "glmnet",
+  "tidyverse",
+  "broom"
+)
+
+pacman::p_load(packages, character.only = TRUE)
+```
+
+
+# Single simulation
+
+Let's create data according to the following highly non-linear formula:
+
+* Outcome: $y = \theta d + cos^2 ( z'b) + u$
+* Assignment to treatment: $d = sin(z'b) + cos(z'b) + u$
+
+We generate 500 observations and 10 nuisance variables:
+
+```{r data}
+set.seed(1234)
+N <- 500
+p <- 10
+theta <- 2
+b <- 1/(1:p) 
+z <- matrix(rnorm(N*p), N, p) # = Generate z = #
+g <- as.vector(cos(z%*%b)^2) # = Generate the function g = #
+m <- as.vector(sin(z%*%b) + cos(z%*%b)) # = Generate the function m = #
+d <- m + rnorm(N) # = Generate d = #
+y <- theta*d + g + rnorm(N) # = Generate y = #
+```
+
+## Naive DML
+
+### Step 1. Predict y
+
+Fit random forest to predict `y` from `z` and collect predictions for the same sample. Note that we will be formally studying random forest next week. For now, we use as a black box (that works).
+
+```{r predict_y}
+model <- randomForest(z,y,maxnodes = 20)
+G <- predict(model,z)
+```
+
+
+### Step 2. Predict d
+
+Repeat the steps above but now for `d` and collect the prediction errors for `d`
+
+```{r predict_d}
+modeld <- randomForest(z, d, maxnodes = 20)
+M <- predict(modeld, z)
+V <- d - M
+```
+
+### Step 3. Calculate theta 
+
+Finally, we can calculate theta according to formula given on the slides. The formula should remind as of an IV estimate.
+
+```{r naive_dml}
+theta_nv <- mean(V*(y - G))/mean(V*d)
+theta_nv
+```
+
+Hmmm, it is quite far from the true value of theta. This is probably due to overfitting bias, that is why we need to do cross-fitting, as discussed in lecture slides.
+
+## Cross-fitting DML
+
+### Step 0. Split sample
+
+In order to avoid overfitting bias, we need to split our data into K parts. Here we split in two:
+
+```{r split_sample}
+I  <- sort(sample(1:N,N/2))
+IC <- setdiff(1:N,I)
+```
+
+  
+### Step 1. Models for y
+
+Fit y model in one sample, predict for another sample. Repeat again by switching the samples.
+
+```{r cf_predict_y}
+model1 <- randomForest(z[IC,],y[IC],maxnodes = 10)
+model2 <- randomForest(z[I,],y[I], maxnodes = 10)
+G1 <- predict(model1,z[I,])
+G2 <- predict(model2,z[IC,])
+```
+  
+### Step 2. Models for d
+  
+Do the same for predicting `d`
+
+```{r cf_predict_d}
+modeld1 <- randomForest(z[IC,],d[IC],maxnodes = 10)
+modeld2 <- randomForest(z[I,],d[I],maxnodes = 10)
+M1 <- predict(modeld1,z[I,])
+M2 <- predict(modeld2,z[IC,])
+V1 <- d[I] - M1
+V2 <- d[IC] - M2
+```
+
+### Step 3. Compute Cross-Fitting DML theta
+
+```{r cf_dml}
+theta1 <- mean(V1*(y[I] - G1))/mean(V1*d[I])
+theta2 <- mean(V2*(y[IC] - G2))/mean(V2*d[IC])
+theta_cf <- mean(c(theta1,theta2))
+theta_cf
+```
+
+Much better! The estimate is closer to 2.
+
+## Cross-fitting DML using cross-validated Lasso
+
+### Step 0. Create interaction terms
+
+Since we are using Lasso, we need to create interaction terms to capture possible non-linearities. As you can see, the polynomial of fifth degree has resulted in number of parameters larger than the number of observations. But this is not a problem for our lasso.
+
+```{r create_X}
+X <- z %>%  as.data.frame()
+X <- model.matrix(~.^5-1, data = X)
+dim(X)
+```
+
+### Step 1. Get predictions for `y`
+
+**Exercise**  Before we proceed, let's see which variables does cross-validation choose for y (out of curiosity). Use the function from the previous tutorial `get_cvLassoCoefs.R`
+
+```{r which_x_chosen}
+# Write your code here
+# source("?")
+# coefs_lasso_y <- ?
+# print(coefs_lasso_y)
+
+```
+
+
+As you can see, we can approximate the complex function  with just few interaction terms!
+
+We transform our function `get_cvLassoCoefs.R` into a function that directly returns to us the predictions for a new sample at best lambda.
+```{r predict_y_cvlasso}
+source("./functions/get_cvLassoPredict.R")
+G1l <- get_cvLassoPredict(X[IC,], y[IC], newX = X[I,])
+G2l <- get_cvLassoPredict(X[I,], y[I], newX = X[IC,])
+```
+
+### Step 2. Get predictions for `d`
+
+**Exercise** Finally, apply the same function to get predictions for `d`.
+
+```{r predict_d_cvlasso}
+# Write your answer here
+# M1l <- 
+# M2l <- 
+# V1l <- 
+# V2l <- 
+```
+
+
+### Step 3. Cross-fitting DML using cross-validated Lasso
+
+```{r cf_dml_lasso}
+theta1l <- mean(V1l*(y[I] - G1l))/mean(V1l*d[I])
+theta2l <- mean(V2l*(y[IC] - G2l))/mean(V2l*d[IC])
+theta_cf_l <- mean(c(theta1l,theta2l))
+theta_cf_l 
+```
+
+Not exactly 2, but also good.
+
+## Simulations 
+
+Let's simulate 20 times and plot the distribution. It takes computational time, so I saved the results for 20 simulations. But you can always uncomment the two lines to do your own simulations.
+
+```{r simulate20}
+set.seed(555)
+source("./functions/simulate_dml.R")
+# results <- simulate_dml(theta = 2, N = 500, p = 10, nSim = 20)
+# write_rds(results, "results/dml_simulations.rds")
+results <-   read_rds("results/dml_simulations.rds")
+```
+
+Now, let's plot the results. As you can see cross-firring DMLs are approximately unbiased. Moreover, the cross-validated linear regularization with Lasso outperforms random forests. Why do you think it is so?
+
+```{r plot_sim_theta_density}
+results %>% 
+  as.data.frame() %>% 
+  gather() %>% 
+  ggplot(aes(x = value, color = key, fill = key)) +
+  geom_density(alpha = 0.3)
+```
+
+# HOMEWORK: try neural networks for DML in python
+
+1) Convert the content of `simulate_dml` to Python code, including Random forest and cross-validated Lasso, keeping the data generating process intact
+2) Add a third method -- neural network -- and see how it compares to the cross-fitting DML cvL and RF. Send the plot of distributions to my email m.kurmangaliyeva@uvt.nl
+
+
+
+
