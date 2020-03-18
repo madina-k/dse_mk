@@ -7,7 +7,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ## GUIDELINES: Testing interactive tutorials
 
-Do steps 1 to 4. If you fail to run the tutorial successfully, please,  
+Do steps 1 to 4. If you fail to run the tutorial successfully, please, post your reply on [canvas discussion](https://tilburguniversity.instructure.com/courses/3527/discussion_topics/40946)
 
 Step 1. Pull the updated version of this git repository
 
