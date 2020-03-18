@@ -1,0 +1,55 @@
+---
+title: "Tutorial Trial DSE 2020 Tilburg"
+author: Madina Kurmangaliyeva
+output: learnr::tutorial
+tutorial:
+  id: "tutorial_trial"
+runtime: shiny_prerendered
+description: "Trial version"
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(fairness)
+library(tree)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+set.seed(123)
+dataset <- fairness::compas %>% 
+  select(-probability,-predicted) %>% 
+  filter(ethnicity == c("Caucasian", "African_American")) %>% 
+  sample_n(1000)
+```
+
+## Part 1. Test tutorial
+
+
+```{r quiz_classification}
+quiz(
+  question("Can I use Lasso for inference?",
+    answer("Yes, the same as for prediction "),
+    answer("Absolutely not "),
+    answer("I do not know"),
+    answer("I can if I use double lasso", correct = TRUE)
+  )
+)
+```
+
+
+
+### Exercise -- see the data
+
+*Here's a simple exercise with a partial code chunk provided for entering the answer.*
+
+Write the R code required to see the head of the `dataset`:
+
+```{r seehead, exercise=TRUE, exercise.eval=FALSE}
+dataset
+```
+
+```{r seehead-hint}
+head(dataset)
+```
+
