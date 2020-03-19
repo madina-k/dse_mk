@@ -7,23 +7,33 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 
 ## Online lectures and tutorials
-### TOPIC: Decision trees
+### Decision trees
 
-**Video Lecture** (to be uploaded)
-**Lecture slides** [link](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)
-**Interactive Tutorial** (see the guideline below) [link](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)
+**1) Video Lecture Decision Trees** (to be uploaded)
 
-### TOPIC: Bagging, Random Forest, Boosting
-**Video Lecture** (to be uploaded)
-**Lecture slides** [link](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)
-**Interactive Tutorial** (see instructions on how to properly run the file below) [link](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)
+**2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)** 
 
-### TOPIC: Why we cannot use Machine Learning for inference
+**3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)** (see the guideline below) 
 
-### TOPIC: Double Machine learning
+### Bagging, Random Forest, Boosting
 
-### TOPIC: Causal Trees
+**1) Video Lecture Bagging, RF, Boosting** (to be uploaded)
 
+**2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)** 
+
+**3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)** (see instructions on how to properly run the file below) 
+
+### Why we cannot use Machine Learning for inference
+
+TBA
+
+### Double Machine learning
+
+TBA
+
+### Causal Trees
+
+TBA
 
 
 ## HOW TO run an interactive tutorial [updated March 19, 2020]
