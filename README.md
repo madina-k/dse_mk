@@ -5,24 +5,45 @@ Copy this repository to your laptop and pull from the master branch before each 
 
 The tutorials are based on R. If you like, you still can use Python (or any other programming language), but then you will have to rely on self-study.
 
-## GUIDELINES: Testing interactive tutorials
+
+## Online lectures and tutorials
+### TOPIC: Decision trees
+
+**Video Lecture** (to be uploaded)
+**Lecture slides** [link](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)
+**Interactive Tutorial** (see the guideline below) [link](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)
+
+### TOPIC: Bagging, Random Forest, Boosting
+**Video Lecture** (to be uploaded)
+**Lecture slides** [link](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)
+**Interactive Tutorial** (see instructions on how to properly run the file below) [link](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)
+
+### TOPIC: Why we cannot use Machine Learning for inference
+
+### TOPIC: Double Machine learning
+
+### TOPIC: Causal Trees
+
+
+
+## HOW TO run an interactive tutorial [updated March 19, 2020]
 
 Do steps 1 to 4. If you fail to run the tutorial successfully, please, post your reply on [canvas discussion](https://tilburguniversity.instructure.com/courses/3527/discussion_topics/40946)
 
 Step 1. Pull the updated version of this git repository
 
-Step 2. Open R and install the following packages:
+Step 2. Open R and install the required packages:
 ```r
 req_packages <- c("learnr", "fairness", "tree", "tidyverse")
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(req_packages, character.only = TRUE)
 ```
-Step 3. Open file `tutorials/tutorial_trial/tutorial_trial.Rmd` and click the green button "Run Document" at the top
+Step 3. Open the tutorial file in the `tutorials/tutorial_xyz/tutorial_xyz.Rmd` and click the green button "Run Document" at the top
 ![Filedirectory](https://github.com/madina-k/dse_mk/blob/master/pics/step1.png)
 
 ![Rundoc](https://github.com/madina-k/dse_mk/blob/master/pics/step2.png)
 
-Step 4. Check that it compiles the html tutorial correctly and try to answer the quiz and coding question.
+Step 4. Work with the compiled tutorial. You get the correct answers for each quiz after you submit an answer first. You can get the **correct answer** to any coding question, by clicking **"hint"** button at the top panel of the coding chunk.
 
 ![Checktutorial](https://github.com/madina-k/dse_mk/blob/master/pics/step3.png)
 
