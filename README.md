@@ -5,6 +5,27 @@ Copy this repository to your laptop and pull from the master branch before each 
 
 The tutorials are based on R. If you like, you still can use Python (or any other programming language), but then you will have to rely on self-study.
 
+## GUIDELINES: Testing interactive tutorials
+
+Do steps 1 to 4. If you fail to run the tutorial successfully, please, post your reply on [canvas discussion](https://tilburguniversity.instructure.com/courses/3527/discussion_topics/40946)
+
+Step 1. Pull the updated version of this git repository
+
+Step 2. Open R and install the following packages:
+```r
+req_packages <- c("learnr", "fairness", "tree", "tidyverse")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+```
+Step 3. Open file `tutorials/tutorial_trial/tutorial_trial.Rmd` and click the green button "Run Document" at the top
+![Filedirectory](https://github.com/madina-k/dse_mk/blob/master/pics/step1.png)
+
+![Rundoc](https://github.com/madina-k/dse_mk/blob/master/pics/step2.png)
+
+Step 4. Check that it compiles the html tutorial correctly and try to answer the quiz and coding question.
+
+![Checktutorial](https://github.com/madina-k/dse_mk/blob/master/pics/step3.png)
+
 ## Preparing R for the hard work
 You have to [install R](https://www.r-project.org/) and [R Studio Desktop](https://rstudio.com/products/rstudio/download/) on your laptop.
 
