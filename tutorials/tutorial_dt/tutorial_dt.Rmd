@@ -1,0 +1,466 @@
+---
+title: "Tutorial Classification Trees DSE 2020 Tilburg"
+author: Madina Kurmangaliyeva
+output: learnr::tutorial
+tutorial:
+  id: "tutorial_classificationtrees"
+runtime: shiny_prerendered
+description: "Classification trees"
+---
+
+```{r setup, include=FALSE}
+library(learnr)
+library(fairness)
+library(tree)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+set.seed(123)
+dataset <- fairness::compas %>% 
+  select(-probability,-predicted) %>% 
+  filter(ethnicity == c("Caucasian", "African_American")) %>% 
+  sample_n(1000)
+```
+
+
+## 1) Generate training and test data
+
+
+We will continue working with COMPAS data. This time it is 1000 observations with a random sample of only *Caucasian* or *African-American*  offenders. This time we will predict recidivism using classification trees.
+
+
+
+```{r quiz_classification}
+quiz(
+  question("Why is predicting recidivism a classification problem?",
+    answer("Because the target variable is a categorical variable", correct = TRUE),
+    answer("Because independent variables include categorical variables"),
+    answer("Because the target variable is a continuous variable"),
+    answer("Because independent variables include continuous variables")
+  )
+)
+```
+
+
+We will be using an R package called `tree`.
+
+### Exercise -- see the data
+
+*Here's a simple exercise with a partial code chunk provided for entering the answer.*
+
+Write the R code required to see the head of the `dataset`:
+
+```{r seehead, exercise=TRUE, exercise.eval=FALSE}
+dataset
+```
+
+```{r seehead-hint}
+head(dataset)
+```
+
+
+### Exercise -- Split data into training and test sets
+
+First, we generate the random index of rows that will be included in the training sample. We should randomly sample from a vector `{0, 1}`. We assign half of our sample to a training set. We assign the result to a vector called `train`. 
+
+The final two lines check how many zeros and how many ones are in the new column `train`. 
+
+*Modify the code below by substituting `____` with object names, digits, etc., to get the vector of size 1000 (as many as there are observations) where approximately half of it is zeros and half is ones.*
+
+```{r generate_train_index, exercise=TRUE, exercise.eval=FALSE}
+set.seed(234)
+
+# Example: sample(x = c(a,b), size = 100, replace =  TRUE, prob = c(0.3, 0.7))
+
+train <- sample(x = c(_, _), size = ____, replace = ____, prob = c(_, _))
+
+sum(train == 0)
+sum(train == 1)
+sum(train == 1) + sum(train == 0)
+```
+
+```{r generate_train_index-hint}
+set.seed(234)
+
+train <- sample(x = c(0, 1), size = 1000, replace = TRUE, prob = c(0.5, 0.5))
+
+sum(train==0)
+sum(train==1)
+sum(train==1) + sum(train==0)
+```
+
+```{r quiz_trainingsize}
+quiz(
+  question("How many observations are assigned to training set?",
+    answer("505"),
+    answer("495", correct = TRUE),
+    answer("1000")
+  )
+)
+```
+
+## 2) Train the classification tree
+
+```{r generate_train, echo=FALSE}
+set.seed(234)
+train <- sample(x = c(0, 1), size = 1000, replace = TRUE, prob = c(0.5, 0.5))
+
+```
+
+Now, we fit a classification tree using  the training sample and `tree` package.
+
+**Good news #1:** We can work directly with dataframes, no need to transform it into a matrix first to feed into the `tree()` function.   
+
+**Good news #2:**  We can directly work with factor variables without transforming them into dummies.   Yay! 
+
+
+We fit the model using *Gini index* as objective criteria (see the slides for explanation). You could also have used `split = "deviance"` option to use misclassification error as the objective criteria instead. We are also putting the minimum leaf size requirement of 50 observations (i.e., every terminal node should contain at least 50 observations).
+
+```{r tree_train, echo=TRUE}
+set.seed(345)
+tree_compas <- tree(Two_yr_Recidivism ~ . , 
+                    data = dataset[train == 1, ],
+                    split = "gini",
+                    minsize = 50,
+                    model = TRUE)
+
+```
+
+
+
+
+### Exercise -- Get summary of the tree
+
+Now, let's see how our decision tree looks like.
+
+*Modify the code below to get the summary of the tree we trained*
+
+```{r summary_tree, exercise=TRUE, exercise.eval=FALSE}
+summary(___)
+```
+
+```{r summary_tree-hint}
+summary(tree_compas)
+```
+
+
+```{r quiz_howmanyleaves}
+quiz(
+  question("How many leaves does the tree have?",
+    answer("477"),
+    answer("164"),
+    answer("18", correct = TRUE)
+  )
+)
+```
+
+```{r quiz_whichvars}
+quiz(
+  question("Which variables does the tree use to predict  recidivism?",
+    answer("number of priors", correct = TRUE),
+    answer("ethnicity", correct = TRUE),
+    answer("age above 45", correct = TRUE),
+    answer("age below 25", correct = TRUE)
+  )
+)
+```
+
+```{r quiz_whichvarimportant}
+quiz(
+  question("Which variable is the most important in predicting recidivism?",
+    answer("number of priors", correct = TRUE),
+    answer("ethnicity"),
+    answer("age above 45"),
+    answer("age below 25")
+  )
+)
+```
+
+
+### Exercise -- Visualize the tree:
+
+*Modify the code below to get the plot of the tree. `plot()` function plots the tree, while `text()` function adds annotations to each node.*
+
+
+```{r plot_tree, exercise=TRUE, exercise.eval=FALSE, fig.height = 12, fig.width=8}
+plot(____)
+text(____, pretty = 0)
+```
+
+```{r plot_tree-hint}
+plot(tree_compas)
+text(tree_compas, pretty = 0)
+```
+
+```{r quiz_predict}
+quiz(
+  question("An offender with the number of priors equal -0.20 and aged above 45 is predicted to",
+    answer("Recidivate"),
+    answer("Not recidivate", correct = TRUE ),
+    answer("No prediction available")
+  )
+)
+```
+
+
+## 3) Tree pruning
+Now let's apply some pruning to our big tree. 
+
+*Fix the code below by feeding `tree_compas` for 10-fold cross-validation*
+
+```{r pruning, exercise=TRUE, exercise.eval=FALSE}
+set.seed(567)
+cv_compas <- cv.tree(____, FUN = prune.misclass, K = __)
+cv_compas
+```
+
+```{r pruning-hint}
+set.seed(896)
+cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
+cv_compas
+```
+
+```{r pruning_proper}
+
+set.seed(896)
+cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
+
+```
+
+Let's plot the tree size and the number of misclassified cases. As you can see from the plot, a much shallower tree could achieve a lower misclassification error.
+
+```{r graph_pruning_size, echo = TRUE}
+tibble(size = cv_compas$size, n_misclassified = cv_compas$dev) %>% 
+  ggplot(aes(x = size, y = n_misclassified)) + 
+  geom_point() + 
+  geom_line(linetype="dashed") + 
+  theme_bw()
+```
+
+Hence, let's actually prune our main tree: 
+```{r pruning_main_tree}
+cat("The lowest classification error is achieved already at ", rev(cv_compas$size)[which.min(rev(cv_compas$dev))], "nodes\n")
+prune_compas <- tree_compas %>% prune.misclass(., best = rev(cv_compas$size)[which.min(rev(cv_compas$dev))])
+```
+
+and plot it 
+
+*Write the code to plot the pruned tree. Hint: use `plot()` and `text()` functions*
+  
+```{r plot_pruned_tree, exercise=TRUE, exercise.eval=FALSE}
+
+```
+
+```{r plot_pruned_tree-hint}
+plot(prune_compas)
+text(prune_compas, pretty = 0)
+```
+
+We  generate predictions based on the pruned tree for the **test sample** using `predict()` function and store them as a separate vector
+
+We choose `type = "class"` becasue we are interested in the prediction of the class (not in the vector of probabilities over different classes).
+
+Calculate the new test error:
+```{r pruned_error, exercise=TRUE, exercise.eval=FALSE}
+dataset <- dataset %>% 
+  mutate(prunedtree_predict = predict(_____, data = _____, type = ______))
+
+dataset %>%  
+  filter(train == 0) %>% summarise(mean(______ != _______))
+```
+
+```{r pruned_error-hint}
+dataset <- dataset %>% 
+  mutate(prunedtree_predict = predict(prune_compas, dataset, type = "class"))
+
+dataset %>%  
+  filter(train == 0) %>% 
+  summarise(mean(Two_yr_Recidivism != prunedtree_predict))
+```
+
+
+```{r quiz_pruned}
+quiz(
+  question("Compared to the unpruned tree, the pruned tree:",
+           answer("lost most of its left branches", correct = TRUE),
+           answer("lost most of its right branches"),
+           answer("is now shallower", correct = TRUE)
+  )
+)
+```
+
+### Generate predictions
+
+We  generate predictions based on the pruned tree for the **full sample** (the training + the test) using `predict()` function and store them as a separate vector
+
+We choose `type = "class"` becasue we are interested in the prediction of the class (not in the vector of probabilities over different classes).
+
+*Fill the code below:*
+
+```{r tree_predict, exercise=TRUE, exercise.eval=FALSE}
+set.seed(456)
+pruned_predict <- predict(object = ____, 
+                        newdata = ____, 
+                        type = "class")
+sum(pruned_predict == "yes")
+```
+
+```{r tree_predict-hint}
+set.seed(456)
+pruned_predict <- predict(object = prune_compas, 
+                        newdata = dataset, 
+                        type = "class")
+sum(pruned_predict == "yes")
+```
+
+
+
+```{r tree_predict_exec, echo=FALSE}
+set.seed(456)
+pruned_predict <- predict(object = prune_compas, 
+                        newdata = dataset, 
+                        type = "class")
+```
+
+
+
+## 3) Misclassification errors and fairness
+
+
+Now we can generate our confusion matrix for the test data (i.e., a matrix that counts number of correctly and incorrectly predicted observations)
+
+Steps in the code below: First, append the predictions to the dataset (with the same name `tree_predict`). Filter dataset for test observations only. Then count number of observations within the interacted values of `Two_yr_Recidivism` (the truth) and `tree_predict` (the prediction). Then, spread the result using the values of `tree_predict` as column names and `n` as values that populate the columns.
+
+```{r confusion_matrix, echo=TRUE}
+dataset %>%  mutate(tree_predict = pruned_predict) %>% 
+  filter(train == 0) %>% 
+  count(Two_yr_Recidivism, tree_predict) %>%
+  spread(tree_predict, n, sep = "_")
+```
+
+```{r quiz_nrecidmisclass}
+quiz(
+  question("How many offenders were predicted to not recidivate while in fact they did recidivate?",
+    answer("229"),
+    answer("54"),
+    answer("124", correct = TRUE),
+    answer("98")
+  )
+)
+```
+
+### Exercise -- calculate misclassification error
+
+
+We can also calculate the misclassification error (i.e., share of observations in the test data which have been wrongly classified )
+
+*Modify the code below to get the misclassification error of the tree we trained*
+
+```{r misclass_error, exercise=TRUE, exercise.eval=FALSE}
+dataset %>%  mutate(tree_predict = pruned_predict) %>% 
+  filter(train == 0) %>%
+  summarise(mean(_____ != _____))
+```
+
+```{r misclass_error-hint}
+dataset %>% mutate(tree_predict = pruned_predict) %>%  
+  filter(train == 0) %>%
+  summarise(mean(Two_yr_Recidivism != tree_predict))
+```
+
+```{r quiz_misclassificationerror}
+quiz(
+  question("What does 0.352 misclassification error mean? It means that using this classification tree to predict future recidivism:",
+    answer("we expect to misclassify 35.2% of offenders", correct = TRUE),
+    answer("we expect to misclassify 35.2% of offenders who will recidivate"),
+    answer("we expect to misclassify 35.2% of offenders who will not recidivate"),
+    answer("we expect to classify only 35.2% of offenders correctly")
+  )
+)
+```
+
+### Exercise -- calculate misclassification error by ethnicity
+
+Now recalculate the misclassification error for each ethnicity group separately.
+
+*Enter your code below to get the misclassification error by ethnicity. Hint: Use `group_by()` function as we did in previous tutorials*
+
+```{r misclass_error_ethnicity, exercise=TRUE, exercise.eval=FALSE}
+
+```
+
+
+
+```{r misclass_error_ethnicity-hint}
+dataset %>% mutate(tree_predict = pruned_predict) %>% 
+  filter(train == 0) %>% 
+  group_by(ethnicity) %>% 
+  summarise(mean(Two_yr_Recidivism != tree_predict))
+
+```
+
+As you can see, African Americans are more likely to be misclassified than Caucasians. 
+
+### Exercise -- calculate False-positive error rate by ethnicity
+
+Calculate how many  offender who **will not** recidivate are being erroneously predicted to recidivate?
+
+
+*Enter your code below to get the false positive error by ethnicity. Hint: You need to `filter()` data to keep only the offenders who will not recidivate*
+
+```{r fp_ethnicity, exercise=TRUE, exercise.eval=FALSE}
+
+```
+
+
+
+```{r fp_ethnicity-hint}
+dataset %>% mutate(tree_predict = pruned_predict) %>% 
+  filter(train == 0, Two_yr_Recidivism == "no") %>% 
+  group_by(ethnicity) %>% 
+  summarise(mean(Two_yr_Recidivism != tree_predict))
+```
+
+```{r quiz_fp}
+quiz(
+  question("What do you find after finding the false positive rates across the two ethnic groups?",
+    answer("There is no problem with the algorithm, the mistakes are not different across ethnic groups"),
+    answer("Among the non-recidivating African Americans 26% were falsely predicted to recidivate", correct = TRUE),
+    answer("The algorithm is unfair, as it is twice more likely to mislabel as high-risk a non-recidivating African American than a non-recidivating Caucasian", correct = TRUE),
+    answer("26% of African Americans recidivate")
+  )
+)
+```
+
+### Exercise -- calculate False-Negative error rate by ethnicity
+
+Calculate how many  offender who **will** recidivate are being erroneously predicted not to recidivate?
+
+
+*Enter your code below to get the false negative error by ethnicity. Hint: You need to `filter()` data to keep only the offenders who will recidivate*
+
+```{r fn_ethnicity, exercise=TRUE, exercise.eval=FALSE}
+
+```
+
+
+
+```{r fn_ethnicity-hint}
+dataset %>% mutate(tree_predict = pruned_predict) %>% 
+  filter(train == 0, Two_yr_Recidivism == "yes") %>% 
+  group_by(ethnicity) %>% 
+  summarise(mean(Two_yr_Recidivism != tree_predict))
+```
+
+```{r quiz_fn}
+quiz(
+  question("What do you find after finding the false negative rates across the two ethnic groups?",
+    answer("There is no problem with the algorithm, the mistakes are not different across ethnic groups"),
+    answer("Among the recidivating African Americans 50.7% were mistakenly labeled as non-recidivating", correct = TRUE),
+    answer("The algorithm is unfair, as it is more likely to mislabel as low-risk a recidivating Caucasian than a non-recidivating African American", correct = TRUE),
+    answer("50.7% of African Americans recidivate")
+  )
+)
+```
+
