@@ -18,7 +18,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Decision trees
 
-**1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk)** 
+**1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk)** (HINT: put speed to 1.25 or even 1.5)
 
 **2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)** 
 
@@ -26,7 +26,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Bagging, Random Forest, Boosting
 
-**1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I)** 
+**1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I)** (HINT: put speed to 1.25 or even 1.5)
 
 **2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)** 
 
@@ -34,7 +34,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Why we cannot use Machine Learning for inference (recap)
 
-**1) [Video Lecture Why ML](https://youtu.be/KwWGhneQUmk)**
+**1) [Video Lecture Why ML Fails](https://youtu.be/KwWGhneQUmk)** (HINT: put speed to 1.25 or even 1.5)
 
 **2) [Lecture slides Why ML Fails](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_slides_whyMLfails_inference.pdf)**
 
