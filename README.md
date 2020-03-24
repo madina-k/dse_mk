@@ -7,25 +7,36 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 
 ## Online lectures and tutorials
+
+### How to use the online lectures and tutorials:
+
+1) For each topic, first, listen to video lectures which summarise the material and cover only a simplified version of lecture slides.
+2) For the full treatment of the topic, read through the full version of the lecture slides. 
+3) Finally, go through the interactive tutorials which allow you to learn-by-doing. Notice that the correct answers for coding exercises are provided as hints. 
+4) Still have questions? Open a discussion on Canvas.
+
+
 ### Decision trees
 
-**1) Video Lecture Decision Trees** (to be uploaded)
+**1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk)** (HINT: put speed to 1.25 or even 1.5)
 
 **2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)** 
 
-**3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)** (see the guideline below) 
+**3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)** (see the instructions below) 
 
 ### Bagging, Random Forest, Boosting
 
-**1) Video Lecture Bagging, RF, Boosting** (to be uploaded)
+**1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I)** (HINT: put speed to 1.25 or even 1.5)
 
 **2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)** 
 
-**3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)** (see instructions on how to properly run the file below) 
+**3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)** (see the  instructions below) 
 
-### Why we cannot use Machine Learning for inference
+### Why we cannot use Machine Learning for inference (recap)
 
-TBA
+**1) [Video Lecture Why ML Fails](https://youtu.be/KwWGhneQUmk)** (HINT: put speed to 1.25 or even 1.5)
+
+**2) [Lecture slides Why ML Fails](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_slides_whyMLfails_inference.pdf)**
 
 ### Double Machine learning
 
