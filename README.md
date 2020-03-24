@@ -44,7 +44,9 @@ TBA
 
 ### Causal Trees
 
-TBA
+1) Attend live lecture using Zoom on Thursday, March 26, at 10:45. [Download Zoom](https://zoom.us/download) in advance for easy experience
+2) [Lecture slides Causal Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_causal_trees.pdf)
+3) Interactive Tutorial Causal Tree (TBA)
 
 
 ## HOW TO run an interactive tutorial [updated March 19, 2020]
