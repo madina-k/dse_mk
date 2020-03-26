@@ -18,35 +18,32 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Decision trees
 
-**1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk)** (HINT: put speed to 1.25 or even 1.5)
-
-**2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)** 
-
-**3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt)** (see the instructions below) 
+1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk) (HINT: put speed to 1.25 or even 1.5)
+2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)
+3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt) (see the instructions below) 
 
 ### Bagging, Random Forest, Boosting
 
-**1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I)** (HINT: put speed to 1.25 or even 1.5)
-
-**2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)** 
-
-**3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost)** (see the  instructions below) 
+1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I) (HINT: put speed to 1.25 or even 1.5)
+2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)
+3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost) (see the  instructions below) 
 
 ### Why we cannot use Machine Learning for inference (recap)
 
-**1) [Video Lecture Why ML Fails](https://youtu.be/KwWGhneQUmk)** (HINT: put speed to 1.25 or even 1.5)
-
-**2) [Lecture slides Why ML Fails](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_slides_whyMLfails_inference.pdf)**
+1) [Video Lecture Why ML Fails](https://youtu.be/KwWGhneQUmk) (HINT: put speed to 1.25 or even 1.5)
+2) [Lecture slides Why ML Fails](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_slides_whyMLfails_inference.pdf)
 
 ### Double Machine learning
 
-TBA
+1) [Lecture Double ML](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_doubleML.pdf)
+2) [NON-interactive Tutorial DML](https://github.com/madina-k/dse_mk/blob/master/tutorials/tutorial3_notebook.Rmd)
+
 
 ### Causal Trees
 
 1) Attend live lecture using Zoom on Thursday, March 26, at 10:45. [Download Zoom](https://zoom.us/download) in advance for easy experience
 2) [Lecture slides Causal Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_causal_trees.pdf)
-3) Interactive Tutorial Causal Tree (TBA)
+3) [Interactive Tutorial Causal Tree](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_ct)
 
 
 ## HOW TO run an interactive tutorial [updated March 19, 2020]
