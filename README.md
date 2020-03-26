@@ -35,8 +35,9 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Double Machine learning
 
-1) [Lecture slides Double ML](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_doubleML.pdf)
-2) [NON-interactive Tutorial DML](https://github.com/madina-k/dse_mk/blob/master/tutorials/tutorial3_notebook.Rmd)
+1) Attend live lecture using Zoom on Thursday, March 26, at 10:45. [Download Zoom](https://zoom.us/download) in advance for easy experience
+2) [Lecture slides Double ML](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_doubleML.pdf)
+3) [NON-interactive Tutorial DML](https://github.com/madina-k/dse_mk/blob/master/tutorials/tutorial3_notebook.Rmd)
 
 
 ### Causal Trees
