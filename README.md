@@ -35,7 +35,7 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 ### Double Machine learning
 
-1) [Lecture Double ML](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_doubleML.pdf)
+1) [Lecture slides Double ML](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_doubleML.pdf)
 2) [NON-interactive Tutorial DML](https://github.com/madina-k/dse_mk/blob/master/tutorials/tutorial3_notebook.Rmd)
 
 
