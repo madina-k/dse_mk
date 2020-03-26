@@ -20,13 +20,24 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 1) [Video Lecture Decision Trees](https://youtu.be/rrSW03Yw_nk) (HINT: put speed to 1.25 or even 1.5)
 2) [Lecture slides Decision Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_decisiontrees.pdf)
-3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt) (see the instructions below) 
+3) [Interactive Tutorial Classification Trees Compas](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_dt) (see the instructions below) See the  instructions below and please run the following code before compiling the tutorial:
+```r
+req_packages <- c("learnr", "fairness", "tree", "tidyverse")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+```
+
 
 ### Bagging, Random Forest, Boosting
 
 1) [Video Lecture Bagging, RF, Boosting](https://youtu.be/STKJNh6us_I) (HINT: put speed to 1.25 or even 1.5)
 2) [Lecture slides Bagging, RF, Boosting ](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_boostingRFbagging.pdf)
-3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost) (see the  instructions below) 
+3) [Interactive Tutorial Bagging, RF, Boosting](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_bagboost). See the  instructions below and please run the following code before compiling the tutorial:
+```r
+req_packages <- c("learnr", "fairness", "tree", "randomForest", "gbm", "tidyverse")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+```
 
 ### Why we cannot use Machine Learning for inference (recap)
 
@@ -45,7 +56,12 @@ The tutorials are based on R. If you like, you still can use Python (or any othe
 
 1) Attend live lecture using Zoom on Thursday, March 26, at 10:45. [Download Zoom](https://zoom.us/download) in advance for easy experience
 2) [Lecture slides Causal Trees](https://github.com/madina-k/dse_mk/blob/master/lectures/DSE_MK_causal_trees.pdf)
-3) [Interactive Tutorial Causal Tree](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_ct)
+3) [Interactive Tutorial Causal Tree](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_ct) Please run the following code before compiling the tutorial:
+```r
+req_packages <- c("learnr", "fairness", "DiagrammeR", "grf", "tidyverse")
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(req_packages, character.only = TRUE)
+```
 
 
 ## HOW TO run an interactive tutorial [updated March 19, 2020]
@@ -54,7 +70,7 @@ Do steps 1 to 4. If you fail to run the tutorial successfully, please, post your
 
 Step 1. Pull the updated version of this git repository
 
-Step 2. Open R and install the required packages:
+Step 2. Open R and install the required packages as indicated for each tutorial. e.g.:
 ```r
 req_packages <- c("learnr", "fairness", "tree", "tidyverse")
 if (!require("pacman")) install.packages("pacman")
