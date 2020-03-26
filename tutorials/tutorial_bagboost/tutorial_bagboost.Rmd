@@ -4,6 +4,7 @@ author: Madina Kurmangaliyeva
 output: learnr::tutorial
 tutorial:
   id: "tutorial_bagging_boosting"
+  version: 2
 runtime: shiny_prerendered
 description: "Tree-based methods: Bagging, Random Forest, Boosting"
 ---
@@ -26,7 +27,8 @@ dataset <- fairness::compas %>%
   sample_n(1000)
 
 train <- sample(x = c(0, 1), size = 1000, replace = TRUE, prob = c(0.5, 0.5))
-
+dataset_edited <- dataset %>% 
+  mutate(Two_yr_Recidivism = as.numeric(Two_yr_Recidivism == "yes"))
 
 tree_compas <- tree(Two_yr_Recidivism ~ . , 
                     data = dataset[train == 1, ],
@@ -36,6 +38,67 @@ tree_compas <- tree(Two_yr_Recidivism ~ . ,
 
 cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
 prune_compas <- tree_compas %>% prune.misclass(., best = rev(cv_compas$size)[which.min(rev(cv_compas$dev))])
+
+set.seed(333)
+bag_compas <- randomForest(Two_yr_Recidivism ~ ., 
+                           data = dataset[train == 1, ], 
+                           ntree = 5000,
+                           mtry = ncol(dataset) - 1,
+                           importance = TRUE)
+
+set.seed(444)
+
+optimal_mtry <- floor(sqrt(6))
+
+rf_compas <- randomForest(Two_yr_Recidivism ~ ., 
+                           data = dataset[train == 1, ], 
+                           ntree = 5000,
+                           mtry = optimal_mtry,
+                           importance = TRUE)
+set.seed(555)
+
+boost_compas <- gbm(Two_yr_Recidivism ~ . , 
+                    data = dataset_edited[train==1, ], 
+                    shrinkage=0.005,
+                    bag.fraction = 0.5,
+                    distribution = "bernoulli", 
+                    n.trees = 5000, 
+                    interaction.depth = 3,
+                    cv.folds = 5)
+
+best_ntrees_boost <- gbm.perf(boost_compas, method="cv", plot.it = FALSE)
+
+set.seed(666)
+
+prunedtree_predict <- predict(object = prune_compas,
+                        newdata = dataset[train==0, ],
+                        type = "class")
+
+
+bag_predict <- predict(object = bag_compas,
+                        newdata = dataset[train==0, ],
+                        type = "response")
+
+
+rf_predict <- predict(object = rf_compas,
+                      newdata = dataset[train==0, ],
+                      type = "response")
+
+boost_predict <- predict(object = boost_compas,
+                         newdata = dataset[train==0, ],
+                         n.trees = best_ntrees_boost) 
+
+
+# Convert predictions by boosting from numerical value into a logical vector
+boost_predict <- boost_predict > 0
+
+
+
+# Convert predictions by boosting from a logical vector into a factor of "yes/no" 
+boost_predict <- ifelse(boost_predict == TRUE, "yes", "no") %>%
+  as.factor()
+
+
 
 ```
 
@@ -84,7 +147,7 @@ We want to predict variable `Two_Yr_Recidivism` using all other variables in the
 
 *Fill in the blanks below to implement bagging. Hint: `ncol(dataset) - 1` gives the number of columns in the dataset minus one -- the target variable). *
 
-```{r bagging, exercise=TRUE, exercise.eval=FALSE}
+```{r bagging, exercise=TRUE, exercise.eval=FALSE,  exercise.timelimit = 360}
 set.seed(333)
 bag_compas <- randomForest(____ ~ ., 
                            data = dataset[train == _, ], 
@@ -120,7 +183,7 @@ importance(_____)
 importance(bag_compas)
 ```
 
-The first measure "MeanDecreaseAccuracy" is computed using out-of-bag data (see a dedicated subsection in Chapter 8 to this method). Remember, that bagging uses a random draw of observations each time to fit a new tree. In short, out-of-bag method is another clever way to approximate test errors by using the sample of data that have not been used by the bagging procedure to grow a given current tree.  In other words, "for each tree, the prediction error on the out-of-bag portion of the data is recorded (error rate for classification, MSE for regression). Then the same is done after permuting each predictor variable. The difference between the two are then averaged over all trees, and normalized by the standard deviation of the differences." Hence, a predictor which premutation leads to the greatest decrease on the mean accuracy is considered to be the most important.
+The first measure "MeanDecreaseAccuracy" is computed using out-of-bag data (see a dedicated subsection in Chapter 8 to this method). Remember, that bagging uses a random draw of observations each time to fit a new tree. In short, out-of-bag method is another clever way to approximate test errors by using the sample of data that have not been used by the bagging procedure to grow a given current tree.  In other words, "for each tree, the prediction error on the out-of-bag portion of the data is recorded (error rate for classification, MSE for regression). Then the same is done after permuting each predictor variable. The difference between the two are then averaged over all trees, and normalized by the standard deviation of the differences." Hence, a predictor which permutation leads to the greatest decrease on the mean accuracy is considered to be the most important.
 
 The second measure "MeanDecreaseGini" is the total decrease in node impurities from splitting on the variable, averaged over all trees. ("For classification, the node impurity is measured by the Gini index. For regression, it is measured by residual sum of squares.") 
 
@@ -151,7 +214,7 @@ quiz(
 
 Now you are ready to grow a real Random Forest. Please use a typical choice of m. 
 
-```{r rf, exercise=TRUE, exercise.eval=FALSE}
+```{r rf, exercise=TRUE, exercise.eval=FALSE,  exercise.timelimit = 360,  exercise.lines = 15}
 
 set.seed(444)
 
@@ -196,7 +259,7 @@ To implement tree boosting we will use function `gbm()` from the package `gbm` (
 
 You need to remember, that this package does not accept target variables in a factor form, but only as `1/0` vector. In other words we need to convert the "yes" and "no" responses of `Two_yr_Recidivism`  into  1 and 0 numbers.
 
-To do so, we create a separate dataframe called `dataset_edited` in which we mutate our target variable to a conformable form (Note that copying the entire dataset is not the most efficient way of doing it. However, since we are dealing witha very small dataset and want to avoid confusion, we create a separate copy.)
+To do so, we create a separate dataframe called `dataset_edited` in which we mutate our target variable to a conformable form (Note that copying the entire dataset is not the most efficient way of doing it. However, since we are dealing with a very small dataset and want to avoid confusion, we create a separate copy.)
 
 
 ```{r editeddata, echo = TRUE}
@@ -208,21 +271,21 @@ dataset_edited <- dataset %>%
 
 ### Exercise -- Boosting
 
-Boosting comes with much more parameters to choose than any previous tree-based modesl:
+Boosting comes with much more parameters to choose than any previous tree-based models:
 
 * `shrinkage` -- the shrinkage parameter which controls the speed of learning from new trees -- usually set somewhere between 0.001 to 0.1
 * `bag.fraction` -- the fraction of observations randomly selected for training the next tree
 * `distribution` -- specifies the distribution of target variable (e.g., "gaussian" and "bernoulli", but also "laplace", "poisson", etc. ); note that in `randomForest` we did not need to specify it, since it automatically recognized that our target variable was a factor.
-* `interaction.depth` -- specifies the maximum depth of tree. Remember that in boosting we can even grow trees with depth 1, i.e. assiging a very small task to each "ant", but the true interaction depth comes from the combination of many "ants"  working sequentially like in a relay race.
+* `interaction.depth` -- specifies the maximum depth of tree. Remember that in boosting we can even grow trees with depth 1, i.e. assigning a very small task to each "ant", but the true interaction depth comes from the combination of many "ants"  working sequentially like in a relay race.
 * `cv.folds` -- specifies number of cross-validation folds to perform. Remember, that unlike in random forest, higher number of trees in boosting may  lead to **overfitting**. Hence, we need to search for the optimal number of trees to grow through cross-validation.
 
-Please modify the code below to train boosted trees to predict `Two_yr_Recidivism` using the `dataset_edited`. Shrink at 0.005, allow to select only a half of the sample randomly to grow each new tree, where each tree has depth one. Grow 5000 trees but ask to do 5-fold cross validation.  Hint: since our target is a categorical variable, use bernouilli distribution.
+Please modify the code below to train boosted trees to predict `Two_yr_Recidivism` using the `dataset_edited`. Shrink at 0.005, allow to select only a half of the sample randomly to grow each new tree, where each tree has depth one. Grow 5000 trees but ask to do 5-fold cross validation.  Hint: since our target is a categorical variable, use Bernoulli distribution.
 
 You can see the relative importance predictors using `summary` function.
 
 *Fill in the blanks in the code below*
 
-```{r boost, exercise=TRUE, exercise.eval=FALSE}
+```{r boost, exercise=TRUE, exercise.eval=FALSE, exercise.timelimit = 360}
 set.seed(555)
 
 boost_compas <- gbm(_______ ~ . , 
@@ -276,8 +339,8 @@ quiz(
     answer("The in-sample fit always improves with the number trees", correct = TRUE),
     answer("The in-sample fit is not affected by the number trees"),
     answer("The out-of-sample fit always improves with the number trees"),
-    answer("The out-of-sample fit first deteriorates and then improves with the number trees becuase of overfitting"),
-    answer("The out-of-sample fit first improves and then deteriorates with the number trees becuase of overfitting", correct = TRUE)
+    answer("The out-of-sample fit first deteriorates and then improves with the number trees because of overfitting"),
+    answer("The out-of-sample fit first improves and then deteriorates with the number trees because of overfitting", correct = TRUE)
   )
 )
 ```
@@ -289,41 +352,9 @@ In general, we see the Bias-Variance trade-off again and again, in every single 
 
 Finally, it is time to put all of the tree-based models in one row and compare their performance.
 
-```{r all}
-set.seed(333)
-bag_compas <- randomForest(Two_yr_Recidivism ~ ., 
-                           data = dataset[train == 1, ], 
-                           ntree = 5000,
-                           mtry = ncol(dataset) - 1,
-                           importance = TRUE)
-
-set.seed(444)
-
-optimal_mtry <- floor(sqrt(6))
-
-rf_compas <- randomForest(Two_yr_Recidivism ~ ., 
-                           data = dataset[train == 1, ], 
-                           ntree = 5000,
-                           mtry = optimal_mtry,
-                           importance = TRUE)
-set.seed(555)
-
-boost_compas <- gbm(Two_yr_Recidivism ~ . , 
-                    data = dataset_edited[train==1, ], 
-                    shrinkage=0.005,
-                    bag.fraction = 0.5,
-                    distribution = "bernoulli", 
-                    n.trees = 5000, 
-                    interaction.depth = 3,
-                    cv.folds = 5)
-
-best_ntrees_boost <- gbm.perf(boost_compas, method="cv", plot.it = FALSE)
-```
-
-
 Let's generate predictions for every method -- pruned tree, bagging, random forest, boosting -- using the test data which we haven't touched so far. 
 
-Note that the predict function for boosting returns back numerical values. We have to convert those predictions again back to a categorical variables by using a logical evaluation whether the redicted value is higher than zero. If it is, then the boosting algorithm predicts that the offender will recidivate. Then, we convert the logical vector into an initial coding of "yes" and "no" values of `Two_yr_Recidivism`.
+Note that the predict function for boosting returns back numerical values. We have to convert those predictions again back to a categorical variables by using a logical evaluation whether the predicted value is higher than zero. If it is, then the boosting algorithm predicts that the offender will recidivate. Then, we convert the logical vector into an initial coding of "yes" and "no" values of `Two_yr_Recidivism`.
 
 
 ```{r test, echo = TRUE}

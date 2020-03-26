@@ -4,6 +4,7 @@ author: Madina Kurmangaliyeva
 output: learnr::tutorial
 tutorial:
   id: "tutorial_classificationtrees"
+  version: 2
 runtime: shiny_prerendered
 description: "Classification trees"
 ---
@@ -21,6 +22,26 @@ dataset <- fairness::compas %>%
   select(-probability,-predicted) %>% 
   filter(ethnicity == c("Caucasian", "African_American")) %>% 
   sample_n(1000)
+
+set.seed(234)
+train <- sample(x = c(0, 1), size = 1000, replace = TRUE, prob = c(0.5, 0.5))
+
+set.seed(345)
+tree_compas <- tree(Two_yr_Recidivism ~ . , 
+                    data = dataset[train == 1, ],
+                    split = "gini",
+                    minsize = 50,
+                    model = TRUE)
+set.seed(896)
+cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
+
+prune_compas <- tree_compas %>% prune.misclass(., best = rev(cv_compas$size)[which.min(rev(cv_compas$dev))])
+
+
+set.seed(456)
+pruned_predict <- predict(object = prune_compas, 
+                        newdata = dataset, 
+                        type = "class")
 ```
 
 
@@ -73,7 +94,7 @@ set.seed(234)
 
 # Example: sample(x = c(a,b), size = 100, replace =  TRUE, prob = c(0.3, 0.7))
 
-train <- sample(x = c(_, _), size = ____, replace = ____, prob = c(_, _))
+train <- sample(x = c(_, _), size = ____, replace = TRUE, prob = c(_, _))
 
 sum(train == 0)
 sum(train == 1)
@@ -101,12 +122,6 @@ quiz(
 ```
 
 ## 2) Train the classification tree
-
-```{r generate_train, echo=FALSE}
-set.seed(234)
-train <- sample(x = c(0, 1), size = 1000, replace = TRUE, prob = c(0.5, 0.5))
-
-```
 
 Now, we fit a classification tree using  the training sample and `tree` package.
 
@@ -155,27 +170,7 @@ quiz(
 )
 ```
 
-```{r quiz_whichvars}
-quiz(
-  question("Which variables does the tree use to predict  recidivism?",
-    answer("number of priors", correct = TRUE),
-    answer("ethnicity", correct = TRUE),
-    answer("age above 45", correct = TRUE),
-    answer("age below 25", correct = TRUE)
-  )
-)
-```
 
-```{r quiz_whichvarimportant}
-quiz(
-  question("Which variable is the most important in predicting recidivism?",
-    answer("number of priors", correct = TRUE),
-    answer("ethnicity"),
-    answer("age above 45"),
-    answer("age below 25")
-  )
-)
-```
 
 
 ### Exercise -- Visualize the tree:
@@ -191,6 +186,30 @@ text(____, pretty = 0)
 ```{r plot_tree-hint}
 plot(tree_compas)
 text(tree_compas, pretty = 0)
+```
+
+```{r quiz_whichvars}
+quiz(
+  question("Which variables does the tree use to predict  recidivism? [multiple answers possible]",
+    answer("number of priors", correct = TRUE),
+    answer("ethnicity", correct = TRUE),
+    answer("age above 45", correct = TRUE),
+    answer("age below 25", correct = TRUE)
+  )
+)
+```
+
+Remember that the very first split  of a decision tree usually indicates the most important predictor for Y. In the end, the very first split finds the variable that helps the most in minimizing RSS.
+
+```{r quiz_whichvarimportant}
+quiz(
+  question("Which variable is the most important in predicting recidivism?",
+    answer("number of priors", correct = TRUE),
+    answer("ethnicity"),
+    answer("age above 45"),
+    answer("age below 25")
+  )
+)
 ```
 
 ```{r quiz_predict}
@@ -210,7 +229,7 @@ Now let's apply some pruning to our big tree.
 *Fix the code below by feeding `tree_compas` for 10-fold cross-validation*
 
 ```{r pruning, exercise=TRUE, exercise.eval=FALSE}
-set.seed(567)
+set.seed(896)
 cv_compas <- cv.tree(____, FUN = prune.misclass, K = __)
 cv_compas
 ```
@@ -221,12 +240,7 @@ cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
 cv_compas
 ```
 
-```{r pruning_proper}
 
-set.seed(896)
-cv_compas <- cv.tree(tree_compas, FUN = prune.misclass, K = 10)
-
-```
 
 Let's plot the tree size and the number of misclassified cases. As you can see from the plot, a much shallower tree could achieve a lower misclassification error.
 
@@ -239,7 +253,7 @@ tibble(size = cv_compas$size, n_misclassified = cv_compas$dev) %>%
 ```
 
 Hence, let's actually prune our main tree: 
-```{r pruning_main_tree}
+```{r pruning_main_tree, echo = TRUE}
 cat("The lowest classification error is achieved already at ", rev(cv_compas$size)[which.min(rev(cv_compas$dev))], "nodes\n")
 prune_compas <- tree_compas %>% prune.misclass(., best = rev(cv_compas$size)[which.min(rev(cv_compas$dev))])
 ```
@@ -259,9 +273,10 @@ text(prune_compas, pretty = 0)
 
 We  generate predictions based on the pruned tree for the **test sample** using `predict()` function and store them as a separate vector
 
-We choose `type = "class"` becasue we are interested in the prediction of the class (not in the vector of probabilities over different classes).
+We choose `type = "class"` because we are interested in the prediction of the class (not in the vector of probabilities over different classes).
 
 Calculate the new test error:
+
 ```{r pruned_error, exercise=TRUE, exercise.eval=FALSE}
 dataset <- dataset %>% 
   mutate(prunedtree_predict = predict(_____, data = _____, type = ______))
@@ -294,7 +309,7 @@ quiz(
 
 We  generate predictions based on the pruned tree for the **full sample** (the training + the test) using `predict()` function and store them as a separate vector
 
-We choose `type = "class"` becasue we are interested in the prediction of the class (not in the vector of probabilities over different classes).
+We choose `type = "class"` because we are interested in the prediction of the class (not in the vector of probabilities over different classes).
 
 *Fill the code below:*
 
@@ -316,16 +331,11 @@ sum(pruned_predict == "yes")
 
 
 
-```{r tree_predict_exec, echo=FALSE}
-set.seed(456)
-pruned_predict <- predict(object = prune_compas, 
-                        newdata = dataset, 
-                        type = "class")
-```
 
 
 
-## 3) Misclassification errors and fairness
+
+## 4) Misclassification errors and fairness
 
 
 Now we can generate our confusion matrix for the test data (i.e., a matrix that counts number of correctly and incorrectly predicted observations)
