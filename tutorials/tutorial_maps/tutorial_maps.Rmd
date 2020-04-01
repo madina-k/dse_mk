@@ -14,6 +14,7 @@ library(learnr)
 library(osmdata)
 library(sf)
 library(ggmap)
+library(naniar)
 library(broom)
 library(viridis)
 library(randomForest)
@@ -89,7 +90,7 @@ data <- data %>%  mutate_at(vars_to_factor, as.factor)
 ```
 
 
-## Objectives
+## 0. Objectives
 
 In this tutorial, we will replicate parts of a study, using some of the tools and concepts that we have learned so far, and learning new ones. In particular, we will see how to: 
 
@@ -846,7 +847,7 @@ data_selected %>%  select(drunk_dr1, drunk_dr2) %>%  head()
 
 Now our data is at the level of crashes (a unique crash id per row), not persons. Moreover, per each crash we know whether driver 1 was drunk or not, and the same for driver 2 (dummy variables `drunk_dr1`, `drunk_dr2`).
 
-## 6. Combining data with census data and distances to bars (Spatial Merge)
+## 6. Spatial Merge
 
 Finally, let's combine our crash data with the data from census and the data on the distances to bars and clubs. In this way we create one comprehensive dataset ready for analysis.
 

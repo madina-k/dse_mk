@@ -67,7 +67,7 @@ pacman::p_load(req_packages, character.only = TRUE)
 
 1) [Interactive Tutorial Maps](https://github.com/madina-k/dse_mk/tree/master/tutorials/tutorial_maps) Please run the following code before compiling the tutorial:
 ```r
-req_packages <- c("learnr", "osmdata", "sf", "ggmap", "broom", "viridis", "randomForest", "tidyverse") 
+req_packages <- c("learnr", "osmdata", "sf", "ggmap", "naniar", "broom", "viridis", "randomForest", "tidyverse") 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(req_packages, character.only = TRUE)
 ```
