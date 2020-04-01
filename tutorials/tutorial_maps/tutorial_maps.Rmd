@@ -1,0 +1,1081 @@
+---
+title: "Tutorial: Working with Geo-Data"
+author: Madina Kurmangaliyeva
+output: learnr::tutorial
+tutorial:
+  id: "tutorial_maps"
+runtime: shiny_prerendered
+description: "Mini-replication study of Levitt and Porter (JPE, 2001) for Chicago"
+---
+  
+```{r setup, include=FALSE}
+# Load packages
+library(learnr)
+library(osmdata)
+library(sf)
+library(ggmap)
+library(broom)
+library(viridis)
+library(randomForest)
+library(tidyverse)
+
+knitr::opts_chunk$set(echo = FALSE)
+
+crash_all <- read_rds("data/crash.rds") %>% 
+  mutate(crash_id = paste(YEAR, ST_CASE, sep = "_")) %>% 
+  select(crash_id, PER_NO, VE_FORMS, PEDS, PER_TYP,  DR_DRINK,
+         MONTH, DAY, DAY_WEEK, YEAR, HOUR,
+         ROUTE,  LATITUDE, LONGITUD, TYP_INT, REL_ROAD, LGT_COND)
+# Replace NA values ----
+na_codes <- read_rds("data/na_codes.rds")
+na_codes <- na_codes[names(crash_all)] %>% compact()
+crash_all <- replace_with_na(crash_all, na_codes)
+crash_sf <- crash_all %>%  filter(!is.na(LONGITUD), !is.na(LATITUDE))
+crash_sf <- crash_sf %>%
+  st_as_sf(coords = c("LONGITUD", "LATITUDE"), crs = "+proj=longlat +datum=WGS84 +no_defs", remove = FALSE)
+
+
+toplot <- crash_sf %>%
+  mutate(
+    crash_type = case_when(
+      VE_FORMS == 1 & PEDS != 0 ~ "car_to_pedestrian",
+      VE_FORMS  > 1 & PEDS == 0 ~ "car_to_car",
+      VE_FORMS == 1 & PEDS == 0 ~ "car_to_obstacle",
+      VE_FORMS  > 1 & PEDS != 0 ~ "other",
+    )
+  )  %>% group_by(crash_id) %>%
+  summarise(crash_type = first(crash_type))
+
+shp_tract_sf <- read_rds("data/tracts_sf.rds")
+demo_census_tract <- read_rds("data/tracts_demography.rds")
+map_county <- read_rds("data/map_county.rds")
+places <- read_rds("data/places.rds")
+bars <- places$bars
+demo_sf <- shp_tract_sf %>% left_join(demo_census_tract)
+
+data_selected <- crash_sf %>%
+  filter(!is.na(LONGITUD), !is.na(LATITUDE)) %>% 
+  filter(VE_FORMS == 2, PEDS == 0) %>%
+  filter(PER_TYP == 1) %>%
+  select(crash_id, DR_DRINK,
+         MONTH, DAY, DAY_WEEK, YEAR, HOUR,
+         ROUTE,  LATITUDE, LONGITUD, TYP_INT, REL_ROAD, LGT_COND) %>%
+  group_by(crash_id) %>%
+  mutate(n = n()) %>%
+  filter(n == 2) %>%
+  mutate(drunk_dr = sample(c(1,2), replace = FALSE)) %>%
+  ungroup() %>%
+  select(-n) %>%
+  spread(drunk_dr, DR_DRINK, sep = "")
+
+
+data_demo <- st_join(data_selected, demo_sf[ , 19:ncol(demo_sf)], left = TRUE)
+
+dist_bars <- st_distance(data_demo$geometry, places$bars$osm_points)
+dist_pubs <- st_distance(data_demo$geometry, places$pubs$osm_points)
+dist_clubs <- st_distance(data_demo$geometry, places$clubs$osm_points)
+
+distances <- tibble(
+  crash_id = data_demo$crash_id,
+  mindist_bars = apply(dist_bars, MARGIN = 1, FUN = min),
+  mindist_pubs = apply(dist_pubs, MARGIN = 1, FUN = min),
+  mindist_clubs = apply(dist_clubs, MARGIN = 1, FUN = min)
+  )
+
+data_demodist <- left_join(data_demo, distances, by = "crash_id")
+data <- data_demodist %>% mutate(atleast1drunk = (drunk_dr1 == 1) | (drunk_dr2 == 1))
+vars_to_factor <- c('atleast1drunk', 'ROUTE', 'TYP_INT', 'REL_ROAD', 'LGT_COND', 'MONTH', 'DAY_WEEK', 'HOUR', 'YEAR')
+data <- data %>%  mutate_at(vars_to_factor, as.factor)
+```
+
+
+## Objectives
+
+In this tutorial, we will replicate parts of a study, using some of the tools and concepts that we have learned so far, and learning new ones. In particular, we will see how to: 
+
+1. Work with _spatial data_ with R:
+
+- work with `sf` spatial objects, including *polygons* (for administrative areas) and *points*
+- overlay datapoints onto locations (areas), based on their coordinates
+- find geographic distance between points
+- get data and city maps from OpenStreetMaps 
+
+2. Apply the tools of _Machine Learning for causal inference_ we learned in the course, namely random forests and double machine learning.
+
+3. Learn to **replicate a policy-relevant study** from data collection up to data analysis. Although we will not replicate the study in full, this tutorial will focus on the most practical steps of working with data.
+
+
+### Replication study
+
+In this tutorial, we will replicate the study ["How Dangerous Are Drinking Drivers?"](https://www.journals.uchicago.edu/doi/pdfplus/10.1086/323281) by Levitt and Porter, published in Journal of Political Economy in 2001.
+
+The abstract of the paper:
+
+"We present a methodology for measuring the risks posed by drinking drivers that relies solely on readily available data on fatal crashes. The key to our identification strategy is a hidden richness inherent in two‐car crashes. Drivers with alcohol in their blood are seven times more likely to cause a fatal crash; legally drunk drivers pose a risk 13 times greater than sober drivers. The externality per mile driven by a drunk driver is at least 30 cents. At current enforcement rates the punishment per arrest for drunk driving that internalizes this externality would be equivalent to a fine of $8,000."
+
+
+Some details about this study (See the introduction of the paper):
+
+- It's based on for the United States
+- The paper uses data on fatal crashes involving two cars, but no pedestrians.
+- This data suffers from *sample selection*: not every crash results in death. We do not observe a lot of serious crashes that have not resulted in deaths.
+- However, we can expect that higher-risk drivers are more likely to be observed ("sampled") in this data. This is exactly what the authors are using. 
+
+
+The authors are able to estimate the _causal impact of drunk driving on the probability of getting into a fatal crash_. Their identification depends on Conditional Independence Assumption. In particular, conditional on location and time drivers are assumed to mix equally on the roads. 
+
+"By *equal mixing*, we mean two things: (1) the number of interactions that a driver has with other cars is independent of the driver’s type, and (2) a driver’s type does not affect the composition of the driver types with which he or she interacts."
+
+If the *equal mixing* assumption holds, they estimate the risk of drunk drivers relative to the risk of sober drivers simply using the counts of how many of the two-car fatal crashes involved no-, one-, and two-drunk drivers. The distributional asymmetries provide information on the relative risks of drunk and sober drivers.
+
+In the paper, they control for geographical location at the level of U.S. states. However, equal mixing assumption at state level might be wrong. For example, we may expect drunk drivers to be concentrated in the city centers close to bars and clubs. Hence, even if drunk drivers are not riskier than sober drivers, we would still see that drunk drivers crash more often into each other (simply due to geo-spatial correlation of their types).
+
+Hence, it is important to control properly for the underlying share of drunk drivers at a more localized geographical unit.
+
+
+### A simplified version for this tutorial.
+
+We simplify the setup compared to the paper. We will not estimate *by how much more drunk* drivers are riskier, but merely whether *drunk drivers are riskier than sober ones*. The intuition of the "equal mixing" assumption used the paper is that: 
+
+- if drunk drivers were no riskier than sober drivers, then when we observe a crash involving a drunk driver in one car, we would not be able to predict whether the driver on the other car was sober or drunk. - if, conversely, drunk drivers were riskier than sober ones, then we would see that car crashes involving a drunk driver in one car will be more (or less) likely to feature a drunk driver in the other car involved in the accident.
+
+
+_Simple example_ 
+
+Suppose that at a given location and time, 800 car drivers drove through and half of those drivers were drunk. Each driver interacted with one other driver, forming in total 400 matches. Because of equal mixing a sober driver is as likely to form a match with a drunk driver as a drunk driver. So there are 100 matches in each bin as shown in table below (rows for driver 1 and columns are for driver 2). 
+
+
+|         | Sober | Drunk |
+| ------- | -----:| -----:|
+| Sober   |   100 |   100 |
+| Drunk   |   100 |   100 |
+
+
+If the probability of causing a fatal accident is 0.1 for both sober and drunk drivers, then we will observe the following distribution of crashes:
+
+|         | Sober | Drunk |
+| ------- | -----:| -----:|
+| Sober   |    20 |    20 |
+| Drunk   |    20 |    20 |
+
+assuming that the probability of an accident is the _sum_ of individual probabilities of causing a fatal accident by each driver. 
+
+Conditional on the second driver being sober, we will observe that the first driver is drunk with probability 50% (20/40). Conditional on the second driver being drunk, the first driver is also drunk with probability 50% (20/40). Hence, there are no distributional asymmetries in this case.
+
+If however, the probability of causing a fatal accident is 0.5 for drunk drivers instead, then we will observe the following distribution of crashes:
+
+|         | Sober | Drunk |
+| ------- | -----:| -----:|
+| Sober   |    20 |    60 |
+| Drunk   |    60 |   100 |
+
+Conditional on the second driver being sober, we will observe that the first driver is drunk with probability 75% (60/80). Conditional on the second driver being drunk, the first driver is also drunk with probability 37.5% (100/160). Hence, there _is_ a distributional asymmetry in this case.
+
+Formally, we will test the null hypothesis that observing a drunk driver in one car involved in a crash does not correlate with observing a drunk (or sober) driver in the other car involved in the same crash.
+And we will do so by estimating $\beta$ parameter in the following regression:
+
+\[I(driver_1 = drunk)  = \beta I(driver_2 = drunk) + f(Z) + \epsilon\]
+
+where $f(Z)$ captures the expected share of drunk drivers at a given set of characteristics $Z$, which includes location and time, and perhaps other important characteristics.
+
+Notice that if $\beta = 0$, it means that there are no distributional asymmetries, and drunk drivers are no riskier than sober drivers.
+
+In our analysis we will use geo-referenced data on fatal accidents for just one city -- Chicago (i.e., Cook County).  It  is very important to capture $f(Z)$ properly and we will try to do so using Random Forest on  set of road, neighborhood, and other characteristics, including distances to bars and clubs, which we will get from open street maps.
+
+
+## 1. FARS Data
+
+We are using data from Fatal Analysis Reporting System (FARS). You can find the raw data on the website of [National Highway Traffic Safety Administration](https://www.nhtsa.gov/node/97996/251), where you can also find the FARS [manuals and documentation](https://crashstats.nhtsa.dot.gov/#/DocumentTypeList/23).
+
+Although FARS dataset is immense, we will just focus on a few important variables, because this is just a tutorial. For this reason, I have already merged several FARS datasets for 2010 to 2016 and limited it to Cook County (Chicago), and the resulting dataset `crash_all` is already loaded in R memory. 
+
+Please note that learning about the data, reading codebooks, and solving problems specific to each dataset is an important step of every data science project, but it is also the most time-consuming one. Although there is always something to learn from going through all the steps, it is also not very efficient.
+In the case of FARS data, these preliminary steps would probably take you a lot of time, possibly days of coding to download, merge and clean the data to solve year-to-year changes in the variable names and values. And this is despite the fact that FARS data is already a pretty "clean" dataset. By preparing the dataset this way, you can already start working with a more interesting part of data manipulations.
+
+### Exercise --- explore the dataset 
+
+*You can explore the dataset `crash_all` in this exercise box to get to know the data better*
+
+```{r data, exercise = TRUE, exercise.eval = TRUE, exercise.lines=7}
+#crash_all
+
+```
+
+```{r data-hint}
+glimpse(crash_all)
+
+```
+
+As you can see there are 4278 observations and 17 variables.
+
+Each row of `crash_all` corresponds to a single person involved in a crash with one or more fatalities. The variables are:
+
+* `crash_id` -- a unique identifier of the crash; created by me as a concatenation of the `YEAR` and `ST_CASE` variables. 
+* `PER_NO` -- is the person identifier (per crash); for example, if in a given crash there are four people involved, then `PER_NO` will contain numbers from 1 to 4.
+* `VE_FORMS` -- number of contact vehicles involved in the crash (this excludes vehicles which were parked, not moving, thus not having a driver)
+* `PEDS` -- number of pedestrians involved in the crash.
+* `PER_TYP` -- the type of the person: 1) Driver, 2) Passenger, 3) Pedestrian, 4) Cyclists, etc.
+* `DR_DRINK` -- a dummy for drunk driver (vehicle-level data);  there is "sufficient information" to conclude that a driver of the vehicle was drinking, if the driver has either police-reported alcohol involvement, or a positive alcohol test result.
+* `YEAR`, `MONTH`, `DAY`, and `HOUR` of the crash.
+* `DAY_WEEK` -- day of the week when crash occurred. Note, that `DAY_WEEK = 1` is Sunday and `DAY_WEEK = 7` is Saturday.
+* `ROUTE` -- the type of road, e.g. 1 to 3 are highways (arterial roads), and 4 to 5 are local roads.
+* `LONGITUD` and `LATITUDE` -- contains information about the  coordinates of the crash.
+* `TYP_INT` -- type of intersection: 1) Not an intersection, 2) 4-way intersection, 3) T-intersection, 4) Y -intersection, etc.
+* `LGT_COND` -- whether it was daylight, or dark with artificial light, or dark with no lights
+* `REL_ROAD` -- crash location relative to trafficway: 1) On roadway, 2) On shoulder, 3) On median, 4) On roadside, etc. (google those terms if needed)
+
+
+
+### Exercise -- find number of crashes with missing GPS coordinates
+
+As you can see from the code below, 535 drivers were reported as drinking. 
+
+Why did we filter `PER_TYP` = 1 ? 
+
+Because our observations are at the level of persons, hence we would have gotten inflated numbers by keeping passengers and missing values by keeping pedestrians. 
+
+Now let's explore how many crashes have coordinates missing.
+
+*Change the code below to see how many cases are missing coordinates*
+```{r inspect, exercise = TRUE, exercise.eval = TRUE}
+crash_all %>% 
+  filter(PER_TYP == 1) %>% #Select drivers only
+  count(DR_DRINK)
+
+```
+
+```{r inspect-hint}
+crash_all %>% 
+  filter(PER_NO == 1) %>% #Select drivers only
+  count(is.na(LONGITUD))
+```
+
+
+```{r quiz_missing}
+quiz(
+  question("How many crashes have  coordinates recorded?",
+    answer("4278"),
+    answer("2952", correct = TRUE),
+    answer("2383"),
+    answer("0")
+  )
+)
+```
+
+```{r quiz_howmanycrashes}
+quiz(
+  question("How many crashes there are in total?",
+    answer("4278"),
+    answer("2952", correct = TRUE),
+    answer("2383"),
+    answer("2308")
+  )
+)
+```
+
+
+### Exercise -- find number of crashes by their type
+
+The code below counts how many crashes involved a single car crashing in at least one pedestrian. Note, how we use `n_distinct()` function. Now do the same to count: 
+
+1. the number of crashes involving two or more cars crashing into each other (no pedestrians)
+2. the number of crashes involving a car hitting an obstacle (no pedestrians).
+
+
+
+*Please modify the code below to get the answer to 1. and, then, to 2.*
+
+```{r crashesbytype, exercise = TRUE, exercise.eval = TRUE}
+# number of crashes involving a driver crushing into pedestrians
+
+crash_all %>% filter(VE_FORMS == 1, PEDS != 0) %>%
+  summarise(n_distinct(crash_id))
+
+```
+
+
+```{r crashesbytype-hint}
+# number of crashes involving two or more car collisions  and no pedestrians
+# VE_FORMS count of the number of vehicles in-transport involved in the crash. Legally parked vehicles are not included.
+
+crash_all %>% filter(VE_FORMS > 1, PEDS == 0) %>%
+  count(crash_id) %>% nrow(.)
+
+# number of crashes involving only one car and no pedestrians
+crash_all %>% filter(VE_FORMS == 1, PEDS == 0) %>%
+  count(crash_id) %>% nrow(.)
+
+
+```
+
+```{r quiz_crashtypes}
+quiz(
+  question("The most frequent type of crash is",
+    answer("car-to-pedestrian"),
+    answer("car-to-car", correct = TRUE),
+    answer("car-to-obstacle")
+  )
+)
+```
+
+
+Now, let's visualize the data.
+
+## 2. Visualizing (ggmap + osm)
+
+We will use `ggmap`, `osmdata` and `ggplot` packages to visualize our data.
+
+
+### Exercise -- get the map 
+
+First, we need to get the general map for Cook County, Illinois, US. To do so:
+
+1. we form a query to the open street map (osm) server, using `getbb()` function from `osmdata` package. The function parses the text query and gives back the rectangle with coordinates corresponding to the location of the text query. 
+2. we use `get_map()` function from `ggmap` package to actually receive the png-files of the map  from the osm server and we save it as `map_county` object.
+3. plot the `map_county` using `ggmap()` function
+
+In the end, we will get our map just like in google maps by entering "Cook County Illinois". (Try Tilburg ;) ) 
+
+NOTE: Please be careful with downloading maps or data from osm. Doing constantly repeated queries or bulk downloads violate their terms of use, and you might be blocked by their server. See the terms [here](https://operations.osmfoundation.org/policies/tiles/).
+
+Hence, to avoid being blocked, do not forget to save the loaded maps or data on your hard drive.
+
+*Get the map by completing the code below, and substituting the blanks with correct code*
+```{r osm_map_get,  exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+location_box <- getbb("Cook County Illinois")
+map_county <- get_map(location = ______, maptype = "toner-lite")
+ggmap(_______)
+```
+
+```{r osm_map_get-hint}
+location_box <- getbb("Cook County Illinois")
+map_county <- get_map(location = location_box, maptype = "toner-lite")
+ggmap(map_county)
+```
+
+
+
+### Converting FARS dataset into an sf object
+
+Now we want to plot all the locations of all the people involved in the fatal crashes.
+
+We will do so by converting our `crash_all` dataframe into an `sf` (simple features) object. An `sf-object` is a table, just like a `data.frame`, but with an additional column called `geometry` which stores the geo-spatial attributes of each observation -- points or polygons (areas). The best part of it, is that we can apply our common tidyverse functions  an `sf` object as if it was a dataframe. For example, we can `filter()`, `mutate()`, `gather()`, etc. This is a great thing, which allows us working with geo-referenced data in a smooth fashion.
+
+In the code below, we do the following:
+
+1. we drop all the observations in `crash_all` with missing coordinates and saving it as `crash_sf`. We know that there are no missing coordinates, but just in case you decide to use the same code on the data for another county, it is better if you code this step anyways.
+2. we convert `crash_sf` into an sf object using `st_as_sf()` function. We specify which columns to use as coordinates, and we supply the coordinate reference system  World Geodetic System 1984, which are used to represent GPS coordinates. We also asked _not_ to remove columns `LONGITUD` and `LATITUDE` from the sf object.
+
+
+```{r as_sf, echo = TRUE}
+# Drop rows with missing coordinates 
+crash_sf <- crash_all %>%  filter(!is.na(LONGITUD), !is.na(LATITUDE))
+
+# Transform into an sf object
+crash_sf <- crash_sf %>%
+  st_as_sf(coords = c("LONGITUD", "LATITUDE"), crs = "+proj=longlat +datum=WGS84 +no_defs", remove = FALSE)
+crash_sf %>% names()
+crash_sf %>% class()
+
+```
+
+As you can see it created an additional column called `geometry`, and now the class of the object includes `sf`.
+
+
+Read more about the [sf package here](https://r-spatial.github.io/sf/). There is also a very useful [cheatsheet](https://github.com/rstudio/cheatsheets/blob/master/sf.pdf) for all other operations possible with sf-objects.
+
+
+### Exercise -- plot `crash_sf`
+
+Now we can plot the `crash_sf` locations using `geom_sf()` layer of `ggplot()`. To avoid overplotting, we also set alpha to some lower value, say, 0.1. (lower alpha makes the color of the points more transparent)
+
+*Fill the blanks*
+
+```{r crash_plot, exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+ggplot() +
+  geom_sf(data = ______,
+          color = "#481567FF",
+          alpha = __,
+          size = 1)
+```
+
+```{r crash_plot-hint}
+ggplot() +
+  geom_sf(data = crash_sf,
+          color = "#481567FF",
+          alpha = 0.1,
+          size = 1)
+```
+
+
+### Exercise -- plot `crash_sf` on top of the Cook County map
+
+The plot from the previous exercise looks like a constellation in a vacuum.
+
+Let's combine that plot with the plot from the first exercise in this section. There is only one important difference, when combining the two:
+
+* In `geom_sf` specify that you do not want to inherit aesthetics from the `ggmap()` plot.
+
+*Fill the blanks in the code below by combining both plots in one*
+
+```{r combine_maps, exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+ggmap(________) +
+  geom_sf(_______________,
+          ...,
+          inherit.aes = FALSE
+          ) +
+  labs(x = "", y = "") #No need to change this line
+```
+
+```{r combine_maps-hint}
+ggmap(map_county) +
+  geom_sf(data = crash_sf,
+          inherit.aes = FALSE,
+          color = "#481567FF",
+          alpha = 0.1,
+          size = 1
+          ) +
+  labs(x = "", y = "")
+```
+
+### Exercise -- vary the color by `DR_DRINK`
+
+Now change the code to vary the color of the dots on the map depending on the drinking status of the driver. Since `DR_DRINK` is numeric, we first need convert it into a factor variable.
+
+```{r map_drunk, exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+ggmap(_______) +
+  geom_sf(aes(color = as.factor(_______), fill = as.factor(_______)),
+          data = ______,
+          ...
+  ) +
+  theme(legend.position="bottom") +
+  labs(x = "", y = "")
+```
+
+```{r map_drunk-hint}
+ggmap(map_county) +
+  geom_sf(aes(color = as.factor(DR_DRINK), fill = as.factor(DR_DRINK)),
+          data = crash_sf,
+          inherit.aes = FALSE,
+          size = 0.8,
+          alpha = 0.7
+  ) +
+  theme(legend.position="bottom") +
+  labs(x = "", y = "")
+```
+
+
+
+### Exercise -- collapse the observations at the crash level, create variable for the type of the crash
+
+As you can see from the previous plot, it is at the level of individuals. We forgot to collapse our data to the level of crashes. 
+
+Now, let's do this instead:
+
+1. Create variable `crash_type`  that records the type of the crash. Note how we use `case_when()` function to assign different values to the variable, depending on the logical operators.
+2. Collapse variable  `crash_type` at the level of crashes, by grouping by the `crash_id` and returning the first observation for the `crash_type` variable within the group
+3. Inspect the head of the created `toplot` data
+
+*Fill in the blanks*
+```{r toplot, exercise = TRUE, exercise.eval = FALSE}
+# 1. Create the new variable
+toplot <- crash_sf %>%
+  mutate(
+    crash_type = case_when(
+      VE_FORMS == 1 & PEDS != 0 ~ "car_to_pedestrian",
+      _________________________ ~ "car_to_car",
+      _________________________ ~ "car_to_obstacle",
+      _________________________ ~ "other",
+    )
+  )  
+
+# 2. Collapse the crash type variable at the level of crashes
+toplot <- toplot %>% 
+  group_by(_______) %>%
+  summarise(crash_type = first(_______)) %>% 
+  ungroup()
+
+# 3, Inspect the head of  `toplot` data
+
+
+```
+
+```{r toplot-hint}
+# Create the new variable
+toplot <- crash_sf %>%
+  mutate(
+    crash_type = case_when(
+      VE_FORMS == 1 & PEDS != 0 ~ "car_to_pedestrian",
+      VE_FORMS  > 1 & PEDS == 0 ~ "car_to_car",
+      VE_FORMS == 1 & PEDS == 0 ~ "car_to_obstacle",
+      VE_FORMS  > 1 & PEDS != 0 ~ "other",
+    )
+  )  
+
+# 2. Collapse the crash type variable at the level of crashes
+toplot <- toplot %>% 
+  group_by(crash_id) %>%
+  summarise(crash_type = first(crash_type)) %>% 
+  ungroup()
+
+# 3, Inspect the head of  `toplot` data
+toplot %>%  head()
+
+```
+
+
+
+### Exercise -- vary the color  by the crash type
+
+Now you can plot the data at the crash level and varying the fill and color by the type of the crash. Note that we use plasma color scheme for discrete values from `viridis` package.
+
+*Fill the blanks*
+```{r plot_by_crashtype, exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+ggmap(______) +
+  geom_sf(
+    ...
+  ) +
+  scale_color_viridis(discrete=TRUE, option="plasma") +
+  scale_fill_viridis(discrete=TRUE, option="plasma") +
+  theme(legend.position="bottom") +
+  labs(x = "", y = "")
+
+```
+
+```{r plot_by_crashtype-hint}
+ggmap(map_county) +
+  geom_sf(aes(color = crash_type, fill = crash_type),
+          data = toplot,
+          inherit.aes = FALSE,
+          size = 0.8,
+          alpha = 0.7
+  ) +
+  scale_color_viridis(discrete = TRUE, option = "plasma") +
+  scale_fill_viridis(discrete = TRUE, option = "plasma") +
+  theme(legend.position="bottom") +
+  labs(x = "", y = "")
+
+```
+
+
+
+```{r quiz_wherepeds}
+quiz(
+  question("Fatal accidents involving pedestrians happen mostly",
+    answer("closer to the center of Chicago", correct = TRUE),
+    answer("closer to suburban area of Chicago")
+  )
+)
+```
+
+
+## 3. Getting data from osm
+
+Now we would like to get the locations of bars, pubs, and nightclubs from the open street maps.
+
+To do so we again use `osmdata` package. 
+
+The code below: 
+
+1. creates a query for bars (key = "amenity", value = "bar") within the geographical box corresponding to Cook County. For example, if we were interested in shops that sell alcohol, we would make a query key = "shop", value = "alcohol". 
+2. gets the data in the form of a list which contains sf-objects (i.e., dataframes with geography feature ready for geo-spatial manipulations). 
+
+*Run the code below*
+```{r osm_getdata_example, exercise = TRUE, exercise.eval = FALSE}
+qbar <- getbb("Cook County") %>% opq() %>% add_osm_feature("amenity", "bar")
+bars <- osmdata_sf(qbar)
+names(bars)
+str(bars$osm_points)
+```
+
+We are interested in a data contained in the osm_points object withing the created `bars` list. As you see, it contains geo-locations of each bar and their names, but also sometimes additional information.
+
+You can see other types of amenities, shops, etc., you can get from the open street maps [here](https://wiki.openstreetmap.org/wiki/Map_Features).
+
+### Exercise -- get pubs and restaurants
+
+Copy the code above and change it to get (1) information also on **pubs** and then (2) on **nightclubs**. Finally, save all three objects (`bars`, `pubs`, `clubs`) as one list `places`.
+
+*Fill in the box below with the code*
+
+```{r osm_getdata, exercise = TRUE, exercise.eval = FALSE, exercise.lines = 12, exercise.timelimit = 360}
+...
+
+
+
+
+
+
+
+
+
+
+places <- list(bars = bars, pubs = pubs, clubs = clubs)
+```
+
+```{r osm_getdata-hint}
+qpub <- getbb("Cook County") %>% opq() %>%
+  add_osm_feature("amenity", "pub")
+pubs <- osmdata_sf(qpub)
+
+qclub <- getbb("Cook County") %>% opq() %>%
+  add_osm_feature("amenity", "nightclub")
+clubs <- osmdata_sf(qclub)
+
+places <- list(bars = bars, pubs = pubs, clubs = clubs)
+```
+
+
+### Exercise -- map the bars
+
+The following code plots the locations of night clubs in Chicago. Can you change the code to plot the locations of bars in Chicago?
+
+*Change the code below to get bars plotted*
+```{r plot_bars,  exercise = TRUE, exercise.eval = TRUE, fig.height = 8, fig.width=6}
+ggmap(map_county) +
+  geom_sf(data = places$clubs$osm_points,
+          inherit.aes = FALSE,
+          colour = "#481567FF",
+          fill = "#481567FF",
+          alpha = .5,
+          size = 2,
+          shape = 21) +
+  labs(x = "", y = "")
+```
+
+
+```{r plot_bars-hint}
+ggmap(map_county) +
+  geom_sf(data = places$bars$osm_points,
+          inherit.aes = FALSE,
+          colour = "#481567FF",
+          fill = "#481567FF",
+          alpha = .5,
+          size = 1,
+          shape = 21) +
+  labs(x = "", y = "")
+```
+
+
+### Exercise -- show paths from a location to all the clubs
+
+You can also use `st_nearest_points` to create lines between two nearest points of one geo-object to another geo-object. In our case we will be asking for creating lines between a two dots (a location of a crash to a location of a night club). However, you can use the same function for example between a location of a crash and a border of Cook County. The function will automatically find the point of the border closest to a given  location.
+
+In the code below we created straight lines from the location of the 15th person in our dataset `crash_sf` to each club in Chicago.
+
+*Change the code to get the location of the 100th person in `crash_sf` to each club*
+```{r pathto_clubs,  exercise = TRUE, exercise.eval = TRUE, fig.height = 8, fig.width=6}
+ggmap(map_county) +
+ geom_sf(data = st_nearest_points(crash_sf[15,], places$clubs$osm_points),
+         alpha = .5,
+         colour = "#481567FF",
+         inherit.aes = FALSE)
+```
+
+
+```{r pathto_clubs-hint}
+ggmap(map_county) +
+ geom_sf(data = st_nearest_points(crash_sf[100,], places$clubs$osm_points),
+         alpha = .5,
+         colour = "#481567FF",
+         inherit.aes = FALSE)
+```
+
+
+### Exercise -- find distances (as bird flies) from crash to a bar
+
+The function `st_distance(x,y)` from `sf` package computes the distance between a point to another point. If you supply vectors of points, it will return a matrix of distances between each point in one vector to each point in another vector,
+
+*Find distances for the first three observations in `crash_sf` and the first five bars*
+```{r find_distance, exercise = TRUE, exercise.eval =FALSE}
+st_distance(x = _______$geometry[_:_], y = _______$_______$_______$geometry[_:_]) 
+```
+
+```{r find_distance-hint}
+st_distance(x = crash_sf$geometry[1:3], y = places$bars$osm_points$geometry[1:5]) 
+```
+
+Note, that we do not care much about projections and their impact on distance calculations here, because we work with a relatively small territory. However, when you need to find a distance over a bigger part of the Earth, you need to take into account the errors due to map projections, by specifying proper `which` parameter of  `st_distance(x, y, which = )` function, or by using `geosphere` package.
+
+Also we could have used google maps API here to get the *driving, biking, or walking time/distance* from one location to another. However, working with google maps requires creating  a personal API key first, and allows only up to 100 free queries (I think). You can read more about a special package called `gmapsdistance` [here](https://www.rdocumentation.org/packages/gmapsdistance/versions/1.0/topics/gmapsdistance). 
+
+
+## 4. Working with census tracts
+
+We have learned how to work with geo-points. Now it is time for polygons. Polygons are geographical objects containing a set of geo-points and straight lines connecting them. A shape of a country is a polygon, a shape of an airport when zooming in on google maps is a polygon.
+
+We will work with census data for Cook County. For the purposes of census data collection, the territory of the U.S. is split into many small geographical units called Census Tracts. 
+
+"The "Census Tract" is an area roughly equivalent to a neighborhood established by the Bureau of Census for analyzing populations. They generally encompass a population between 2,500 to 8,000 people."
+
+To save time, I already downloaded the Cook County's shapefiles and some important census information for 2010 from the [NHGIS](https://www.nhgis.org/).
+
+
+
+
+### Exercise -- Plot the shapefiles for Cook County
+
+I transformed the county shapefile into an sf object and then loaded it into R as `shp_tract_sf`.
+
+Try to plot it.
+
+*fill in the blanks*
+```{r plot_tractshape,  exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+___________ %>%   ggplot() + geom_sf() 
+```
+
+```{r plot_tractshape-hint}
+shp_tract_sf %>%   ggplot() + geom_sf()
+```
+
+This map represents the division of the Cook County into Census Tracts. As you can see the census tracts are smaller in the city center are since it is more densely populated.
+
+### Exercise -- Merge the shapefile and the census data
+
+As you can see from the code below, the shapefile `shp_tract_sf` contains identifiers for each tract, as well as information about the area of the tract and the geometry.
+
+Now take a look at the census data file which I loaded as `demo_census_tract`.
+
+*Change the code to inspect census demographics stats*
+```{r exploretract,  exercise = TRUE, exercise.eval = TRUE}
+glimpse(shp_tract_sf)
+```
+
+```{r exploretract-hint}
+glimpse(demo_census_tract)
+```
+
+Importantly, we know the median household income, as well as ethnicity (white, black, Hispanic, etc.) of residents per each tract.
+
+Note that both the shapefile and the census statistics data include the "GISJOIN" variable. This is the identifier we will use to join the two objects. We use `left_join(x,y)`, which tells R to "return all rows from x, and all columns from x and y. Rows in x with no match in y will have NA values in the new columns."
+
+We want to keep all rows of the `shp_tract_sf`.  Notice how we tell R which variable to join by with `by = "GISJOIN"`.
+
+*Fill in blanks*
+```{r merge1,  exercise = TRUE, exercise.eval = FALSE}
+demo_sf <-  left_join(_______, _______, by = "GISJOIN")
+
+glimpse(demo_sf)
+```
+
+```{r merge1-hint}
+demo_sf <-  left_join(shp_tract_sf, demo_census_tract)
+
+glimpse(demo_sf)
+```
+
+
+### Exercise -- Plot the shapefiles for Cook County by ethnicity
+
+
+Now you can plot the newly merged `demo_sf` to see the census tracts by the share of white residents `tract_white_s`.
+
+*Fill in the blanks*
+```{r plot_tracts,  exercise = TRUE, exercise.eval = FALSE, fig.height = 8, fig.width=6}
+______ %>%   ggplot() +
+  geom_sf(aes(fill = ______)) +
+  scale_fill_viridis() 
+```
+
+```{r plot_tracts-hint}
+demo_sf %>%   ggplot() +
+  geom_sf(aes(fill = tract_white_s)) +
+  scale_fill_viridis() 
+```
+
+
+
+### Faceting the plot
+
+The code below shows how to use `gather()` in combination with `ggplot()` to be able to `facet_grid()` combining two (or more if you want) variables in one plot.
+
+
+```{r plot_tracts2, fig.height = 8, fig.width=8, echo = TRUE}
+demo_sf %>%  
+  select(tract_white_s, tract_black_s) %>% #select vars you want to plot
+  gather(key, value, -geometry) %>% #reshape the data into long format
+  ggplot() +
+  geom_sf(aes(fill = value)) + 
+  facet_grid(~key) +
+  scale_fill_viridis()
+```
+
+
+Does Chicago look segregated to you?
+
+If you want to know how to cluster the tracts into bigger geographical units based on ethnicity or income of residents, you can use the [`compx` package](https://philchodrow.github.io/compx/vignette_clustering.html). (But you will need the devtools installed first.)
+
+## 5.Transforming crash data for analysis 
+
+Remember, our goal is to estimate beta coefficient, and to do so we decided to train a Random Forest to help predicting drunk drivers from the set of observable characteristics.
+
+We start by transforming `crash_sf`. 
+
+1. We keep only two-car crashes and the information about the drivers
+2. Per each `crash_id` we count how many observations are left `group_by(crash_id) %>% mutate(n = n())`, it should be two so we ensure that by using the filter `filter(n == 2)`
+3. Per each `crash_id` we randomly assign the two drivers to be first or second with `sample(c(1,2))`. Note that we used the name `drunk_dr` in preparation to a later transformation into wide format. (Why do we assign randomly? This is because the order assigned by FARS to drunk driver might not be random. In other words, the police is more likely to fill in the documents for a drunk driver as the first participant and then for the rest. This is an example of how you should be careful when analyzing the data).
+4. Never forget to `ungroup()` the data after you are done with transforming at the group level!
+5. Finally, we spread the data using the assigned driver number in step 3 and fill it in with the information on whether the driver was drinking or not. 
+
+
+
+I know that the last manipulation may sound confusing, that is why you see `drunk_dr` and `DR_DRINK` variables before and after the spreading operation. You can manipulate the code below to explore more the differences each line of code makes.
+
+```{r filtering, exercise = TRUE, exercise.eval = TRUE}
+
+data_selected <- crash_sf %>%
+  filter(VE_FORMS == 2, PEDS == 0) %>%
+  filter(PER_TYP == 1) 
+
+data_selected <-  data_selected %>%
+  group_by(crash_id) %>%
+  mutate(n = n()) %>%
+  filter(n == 2) %>%
+  select(-n) %>%
+  mutate(drunk_dr = sample(c(1,2), replace = FALSE)) %>%
+  ungroup() 
+
+data_selected %>%  select(drunk_dr, DR_DRINK) %>%  head()
+
+data_selected <-  data_selected %>%
+  spread(drunk_dr, DR_DRINK, sep="")
+
+data_selected %>%  select(drunk_dr1, drunk_dr2) %>%  head()
+```
+
+
+Now our data is at the level of crashes (a unique crash id per row), not persons. Moreover, per each crash we know whether driver 1 was drunk or not, and the same for driver 2 (dummy variables `drunk_dr1`, `drunk_dr2`).
+
+## 6. Combining data with census data and distances to bars (Spatial Merge)
+
+Finally, let's combine our crash data with the data from census and the data on the distances to bars and clubs. In this way we create one comprehensive dataset ready for analysis.
+
+
+### Exercise -- Spatial merge of crashes to corresponding census tracts
+
+Next, we want to append to our crash data the information about the neighborhood (Census Tract).
+
+This will require matching each crash location in `data_selected`  to the polygon (tract) in `demo_sf` to which that location belongs to. 
+
+How do we do that? How do we know in which Census Tract a given crash occurred?  
+
+We use spatial joint function `st_join()`, instead of the usual `join()` function when we join two datasets. It finds automatically the intersection between a point and a polygon. So instead of supplying the variable by which we merge (like in the previous example `by = "GISJOIN"`), the joining is based on spatial information.
+
+We actually do not want the merge with all the variables of the `demo_sf`. Remember it had lots of rubbish information coming from the shapefiles themselves. 
+
+So we first subset `demo_sf` by taking only columns starting from the 19th.
+
+*Fill in blanks in the code below. Use function `st_join()` for spatial merge*
+```{r spatialmerge, exercise = TRUE, exercise.eval = FALSE}
+dct  <- ______[ , 19:ncol(_____)]
+data_demo <- ______(_______, dct, left = TRUE)
+names(data_demo)
+```
+
+```{r spatialmerge-hint}
+dct  <- demo_sf[ , 19:ncol(demo_sf)]
+data_demo <- st_join(data_selected, dct, left = TRUE)
+names(data_demo)
+```
+
+
+### Merging with distances to bars, pubs, and clubs
+
+Finally, we want to attach also data on the minimum distances between each crash and a bar, a pub, or a club to our main database for analysis.
+
+
+
+### Exercise -- find distance matrices 
+
+Find the distance matrices between crashes and bars/pubs/clubs
+
+*Finish the code below*
+```{r dist_to, exercise = TRUE, exercise.eval = FALSE}
+dist_bars <- st_distance(data_demo$geometry, places$bars$osm_points)
+dim(dist_bars)
+
+# Finish the code for pubs and clubs
+dist_pubs <- 
+dist_clubs <- 
+```
+
+```{r dist_to-hint}
+dist_bars <- st_distance(data_demo$geometry, places$bars$osm_points)
+dim(dist_bars)
+
+# Finish the code for pubs and clubs
+dist_pubs <- st_distance(data_demo$geometry, places$pubs$osm_points)
+dist_clubs <- st_distance(data_demo$geometry, places$clubs$osm_points)
+```
+
+
+```{r quiz_dist}
+quiz(
+  question("In the object dist_bars",
+    answer("rows correspond to bars, and columns to crashes"),
+    answer("rows correspond to crashes, and columns to bars", correct = TRUE),
+    answer("the distances are in meters", correct = TRUE),
+    answer("the distances are in kilometers")
+  )
+)
+```
+
+
+### Exercise -- find minimum distances and merge with the main dataset
+
+We create a tibble (dataframe) called `distances` in which we store the id of the crash, and the minimum distance to a bar/pub/club.
+
+To find the minimum distance we use function `apply(X, MARGIN, FUN)`. For example, `apply(X, 1, mean)`, finds the mean for each row, returning a vector with as many elements as there are rows in `X`. If `apply(X, 2, mean)`, then it finds mean for each column, returning a vector with as many elements as there are columns in `X`.
+
+*Fill in the blanks below*
+```{r distances, exercise = TRUE, exercise.eval = FALSE}
+distances <- tibble(
+  crash_id = data_demo$_____,
+  mindist_bars  = apply(_______, MARGIN = _, FUN = ___),
+  mindist_pubs  = apply(_______, MARGIN = _, FUN = ___),
+  mindist_clubs = apply(_______, MARGIN = _, FUN = ___)
+  )
+```
+
+```{r distances-hint}
+distances <- tibble(
+  crash_id = data_demo$crash_id,
+  mindist_bars = apply(dist_bars, MARGIN = 1, FUN = min),
+  mindist_pubs = apply(dist_pubs, MARGIN = 1, FUN = min),
+  mindist_clubs = apply(dist_clubs, MARGIN = 1, FUN = min)
+  )
+```
+
+Now merge `data_demo` with `distances` and create a new dataframe called `data_demodist`. Note, that you also need to supply the name of the column for merging, which should be present in both datasets.
+
+*Fill in the blanks below*
+```{r jointodistances, exercise = TRUE, exercise.eval = FALSE}
+data_demodist <- _______(_______, _______, by = "______")
+data_demodist %>%  names()
+```
+
+```{r jointodistances-hint}
+data_demodist <- left_join(data_demo, distances, by = "crash_id")
+data_demodist %>%  names()
+```
+
+
+OK, the most important part of this tutorial is over, we gathered all data necessary for the analysis.
+
+Next, we are going to the final part of this tutorial: the data analysis.
+
+## 7. Data analysis 
+
+This section is a brief explanation on how to proceed with the analysis.
+
+Our goal is to estimate $\beta$ in the following regression:
+
+\[I(driver_1 = drunk)  = \beta I(driver_2 = drunk) + f(Z) + \epsilon\]
+
+We will apply Double Machine Learning to do so.
+
+Notice, that in this case we need to predict just one variable, since the outcome $I(driver_1 = drunk)$ and the treatment $I(driver_2 = drunk)$ essentially need the same value predicted: the probability that a driver is drunk at a given level of controls $Z$.
+
+However, we do not know the functional form of $f(Z)$, so we use Random Forest to learn it.
+
+First of all we create a variable we are going to use as outcome variable for Random Forest. We will use a dummy variable `atleast1drunk` which equals to 1 if any of the drivers (or both) in the two-car crash was drinking.
+
+Then we change the variables we want to be recognized as categorical to factors, using `mutate_at()` function. For example, these include the type of road, the type of intersection, the  position of the crash relative to the trafficway, light conditions
+
+```{r new_variable, echo=TRUE}
+# create dummy "atleast1drunk"
+data <- data_demodist %>%
+  mutate(atleast1drunk = (drunk_dr1 == 1) | (drunk_dr2 == 1))
+
+# change some variables to factors
+vars_to_factor <- c('atleast1drunk', 'ROUTE', 'TYP_INT', 'REL_ROAD', 'LGT_COND', 'MONTH', 'DAY_WEEK', 'HOUR', 'YEAR')
+data <- data %>%  mutate_at(vars_to_factor, as.factor)
+
+```
+
+```{r quiz_whatinclude}
+quiz(
+  question("In principle, which variables we should exclude from the ML-stage when our aim is inference (e.g., DML)",
+    answer("all the variables that are correlated with the treatment (e.g., hour of the day in our analysis"),
+    answer("all the variables that could have been affected themselves by the treatment (e.g., hit-and-run in our analysis, since drunk drivers might be more likely to run after an accident)", correct = TRUE),
+    answer("the variables that are likely to be just noise (e.g., the color of the car)", correct = TRUE),
+    answer("the variables that can be important but measured imprecisely")
+  )
+)
+```
+
+First, even if our goal is prediction it is good to exclude pure noise. We know from  the ISLR textbook, Lasso tends to perform worse when we dilute the important predictors by adding more and more pure noise variables.
+
+Second, when our end goal is inference, as a rule of thumb, we should  use ONLY pre-determined variables as controls. Remember the example with estimating the impact of grandparent's education on grandchildren outcomes. Controlling for parents' education was a bad idea, because parents' education is affected by the treatment (grandparents' education). Hence, every time you decide whether to include the variable in the analysis as a control or drop it, you should ask yourself: "Is this variable itself affected by my treatment variable?" If the answer is yes, drop it, otherwise it is a BAD control.
+
+The rest of the code repeats the steps necessary for applying DML on our dataset, repeating the steps from the previous tutorial.
+
+*Click run if you want to see the estimate for beta and its standard error*
+
+```{r dml_full, exercise = TRUE, exercise.eval = FALSE, exercise.lines = 80, exercise.timelimit = 1000}
+# Prepare data for Random Forest
+data_for_forest <- data %>% select(-crash_id, -drunk_dr1, -drunk_dr2)
+data_for_forest$geometry <- NULL
+sum(complete.cases(data_for_forest)==FALSE)
+names(data_for_forest)
+data <- data[complete.cases(data_for_forest) == TRUE, ]
+data_for_forest <- data_for_forest[complete.cases(data_for_forest) == TRUE, ]
+
+
+# Run Random Forest cross-fitted on two random subsamples
+optimal_mtry <- floor(sqrt(ncol(data_for_forest)-1))
+est_sample <- sample(x = c(FALSE,TRUE), size = nrow(data_for_forest), replace = TRUE,  prob = c(0.5, 0.5))
+
+rand_forest1 <- randomForest(atleast1drunk ~ .,
+                          data = data_for_forest[est_sample==1, ],
+                          ntree = 2000,
+                          mtry = optimal_mtry,
+                          importance = TRUE)
+# importance(rand_forest1)
+
+rand_forest2 <- randomForest(atleast1drunk ~ .,
+                             data = data_for_forest[est_sample==0, ],
+                             ntree = 2000,
+                             mtry = optimal_mtry,
+                             importance = TRUE)
+# importance(rand_forest2)
+
+# Get corresponding predictions 
+data_topredict <- data_for_forest %>%  select(-atleast1drunk)
+predicted1 <- predict(rand_forest1, newdata = data_topredict, type = "prob")[ , 2]
+predicted2 <- predict(rand_forest2, newdata = data_topredict, type = "prob")[ , 2]
+prediction <- ifelse(est_sample==1, predicted2, predicted1)
+data <- data %>%
+  mutate(
+    prediction = prediction
+  )
+
+# Plot the predictions of drunk driving by the Random Forest
+toplot <- data %>%
+  select(prediction, atleast1drunk) %>%
+  mutate(atleast1drunk = as.numeric(atleast1drunk==TRUE)) %>%
+  gather(key, value, -geometry)
+toplot %>%  head()
+ggmap(map_county) +
+  geom_sf(aes(fill = value, color = value), data = toplot,inherit.aes = FALSE) +
+  facet_grid(~key)+
+  scale_fill_viridis() +
+  scale_color_viridis() 
+
+
+# Get errors from the predictions for y and d
+data <- data %>%
+  mutate(error1 = drunk_dr1 - prediction, error2 = drunk_dr2 - prediction)
+
+data$geometry <- NULL
+
+#Robinson-style DML
+data %>%  summarise(DMLest = mean(error1*error2)/mean(error2^2))
+data %>%  summarise(DMLse = sqrt(mean(error1^2*error2^2)/mean(error2^2)^2)/sqrt(n()))
+```
+
+As you can see, after all, we can reject the null hypothesis that drunk drivers are as risky as sober drivers.
+
+
+
+
